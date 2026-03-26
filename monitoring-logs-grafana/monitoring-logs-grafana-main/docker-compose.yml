@@ -1,0 +1,45 @@
+version: '3'
+services:
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    command: /fluent-bit/bin/fluent-bit --config=/fluent-bit/etc/conf/fluent-bit.conf
+    volumes:
+      - ./fluent-bit.conf:/fluent-bit/etc/conf/fluent-bit.conf
+      - ./labelmap.json:/fluent-bit/labelmap.json
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - ./parsers.conf:/fluent-bit/etc/conf/parsers.conf
+    depends_on:
+      - loki
+    networks:
+      - observability
+  loki:
+    image: grafana/loki:main
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - observability
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_FEATURE_TOGGLES_ENABLE=accessControlOnCall
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    ports:
+      - 3000:3000/tcp
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+    networks:
+      - observability
+    
+networks:
+  observability:
+    external: true
+    name: observability
+
+    

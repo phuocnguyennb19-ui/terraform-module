@@ -1,0 +1,6 @@
+{
+  "container_name": "app",
+  "source": "source",
+  "image": "image",
+  "name": "container_name"
+}
