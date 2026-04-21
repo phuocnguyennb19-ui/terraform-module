@@ -1,4 +1,4 @@
 bucket  = "sm-terraform-statefile-dev"
+key     = "dev/infrastructure/terraform.tfstate"
 region  = "us-east-1"
-key     = "platform/dev/vpc/terraform.tfstate"
 profile = "personal-dev"

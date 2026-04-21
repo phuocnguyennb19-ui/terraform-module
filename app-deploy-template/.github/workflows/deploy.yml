@@ -1,0 +1,44 @@
+name: "App Deploy - Zero Touch Engine"
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+
+jobs:
+  deploy:
+    name: "Deploy App via Central Engine"
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout Application Code & Config
+      - name: "Checkout Application Repo"
+        uses: actions/checkout@v4
+        with:
+          path: app-repo
+
+      # 2. Checkout Terraform Engine (The Logic)
+      # Note: Needs GH_PAT_FOR_ENGINE if the Engine repo is private
+      - name: "Checkout Terraform Engine"
+        uses: actions/checkout@v4
+        with:
+          repository: phuocnguyennb19-ui/terraform-project
+          path: engine-repo
+          token: ${{ secrets.GH_PAT_FOR_ENGINE }}
+
+      # 3. Setup Terraform
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+
+      # 4. Deploy using the Platform Engine
+      # We stand in engine-repo/platform but point config to app-repo/config.yml
+      - name: "Terraform Apply"
+        run: |
+          cd engine-repo/platform
+          terraform init -backend-config=backend.hcl
+          terraform apply -auto-approve -var="config_path=../../app-repo/config.yml"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
