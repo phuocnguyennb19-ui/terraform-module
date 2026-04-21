@@ -1,0 +1,13 @@
+# --- App Deploy Config ---
+app_name: "my-app"
+service_type: "api" # api, worker, cron
+
+service:
+  image: "nginx:latest"
+  port: 80
+  lb_type: "alb"
+  priority: 100
+  host_header: "app.dev.example.com"
+
+tags:
+  Maintainer: "AppTeam"

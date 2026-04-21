@@ -1,0 +1,16 @@
+global:
+  terraform_state_bucket: "sm-terraform-statefile-dev"
+  environment: dev
+  region: us-east-1
+  project: "SM-Platform"
+  aws_profile: "personal-dev"
+
+base_infra:
+  vpc_name: "core-vpc"
+  ecs_cluster_name: "core-cluster"
+  logging_retention_days: 90
+
+# Cấu hình dùng chung cho toàn bộ các apps (Default)
+app_defaults:
+  capacity_provider: "FARGATE"
+  enable_execute_command: true

@@ -1,0 +1,42 @@
+name: "Engine-Based Application Deploy"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'config.yml'
+
+jobs:
+  deploy:
+    name: "Deploy Application via Central Engine"
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Clone Repo của Ứng dụng (Chỉ chứa config.yml)
+      - name: Checkout Application Repo
+        uses: actions/checkout@v4
+        with:
+          path: app-repo
+
+      # 2. Clone Repo của Terraform Engine (Chứa các file .tf)
+      - name: Checkout Terraform Engine
+        uses: actions/checkout@v4
+        with:
+          repository: your-org/terraform-engine-repo
+          path: engine-repo
+          token: ${{ secrets.GH_PAT_FOR_MODULES }}
+
+      # 3. Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # 4. Terraform Init & Apply
+      # Chúng ta đứng tại folder Engine nhưng trỏ Config vào folder App
+      - name: Terraform Action
+        run: |
+          cd engine-repo/platform-engine
+          terraform init -backend-config=backend.hcl
+          terraform apply -auto-approve -var="config_path=../../app-repo/config.yml"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
