@@ -1,22 +1,19 @@
-resource "aws_ecr_repository" "this" {
+module "ecr" {
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-ecr.git?ref=v1.6.0"
+  
   for_each = toset(local.ecr_config.repository_names)
 
-  name                 = each.value
-  image_tag_mutability = local.ecr_config.image_tag_mutability
+  repository_name = each.value
+  repository_type = "private"
 
-  image_scanning_configuration {
-    scan_on_push = local.ecr_config.scan_on_push
-  }
+  repository_image_tag_mutability = local.ecr_config.image_tag_mutability
+  repository_read_access_arns     = [] # Optional: Grant read access to specific roles
+  
+  # Image Scanning
+  repository_image_scan_on_push = local.ecr_config.scan_on_push
 
-  tags = local.tags
-}
-
-resource "aws_ecr_lifecycle_policy" "this" {
-  for_each = aws_ecr_repository.this
-
-  repository = each.value.name
-
-  policy = jsonencode({
+  # Lifecycle Policy
+  repository_lifecycle_policy = jsonencode({
     rules = [
       {
         rulePriority = 1
@@ -32,4 +29,6 @@ resource "aws_ecr_lifecycle_policy" "this" {
       }
     ]
   })
+
+  tags = local.tags
 }
