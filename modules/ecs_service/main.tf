@@ -1,45 +1,47 @@
-# Chuẩn hóa: Sử dụng module cho Target Group & Listener Rule
-module "lb_resources" {
-  source  = "terraform-aws-modules/alb/aws"
-  version = "~> 8.0"
+# Target Group (native resource — avoids ALB module version dependency)
+resource "aws_lb_target_group" "app" {
+  count = lookup(local.service_cfg.load_balancer, "container_name", "") != "" ? 1 : 0
 
-  create_lb = false
+  name_prefix = "h-"
+  protocol    = "HTTP"
+  port        = lookup(local.service_cfg.load_balancer, "container_port", 80)
+  vpc_id      = var.vpc_id
+  target_type = "ip"
 
-  target_groups = [
-    {
-      name_prefix      = "h"
-      backend_protocol = "HTTP"
-      backend_port     = lookup(local.service_cfg.load_balancer, "container_port", 80)
-      target_type      = "ip"
-      health_check = {
-        enabled             = true
-        path                = lookup(local.service_cfg, "health_check_path", "/")
-        healthy_threshold   = 2
-        unhealthy_threshold = 3
-        timeout             = 5
-        interval            = 30
-        matcher             = "200"
-      }
+  health_check {
+    enabled             = true
+    path                = local.service_cfg.health_check_path
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = local.service_cfg.health_check_matcher
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = local.tags
+}
+
+# Listener Rule on existing ALB listener
+resource "aws_lb_listener_rule" "app" {
+  count = lookup(local.service_cfg.load_balancer, "container_name", "") != "" && var.listener_arn != null ? 1 : 0
+
+  listener_arn = var.listener_arn
+  priority     = local.service_cfg.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app[0].arn
+  }
+
+  condition {
+    host_header {
+      values = [local.service_cfg.host_header != null ? local.service_cfg.host_header : "${local.app_name}.${local.env}.internal"]
     }
-  ]
-
-  http_tcp_listener_rules = var.listener_arn != null && var.listener_arn != "" ? [
-    {
-      http_listener_arn = var.listener_arn
-      priority          = lookup(local.service_cfg, "priority", 100)
-      actions = [
-        {
-          type               = "forward"
-          target_group_index = 0
-        }
-      ]
-      conditions = [
-        {
-          host_headers = [lookup(local.service_cfg, "host_header", "${local.app_name}.${local.env}.internal")]
-        }
-      ]
-    }
-  ] : []
+  }
 
   tags = local.tags
 }
@@ -79,10 +81,10 @@ module "ecs_service" {
   create_security_group = local.service_cfg.security_group_ids == null
   security_group_rules  = local.ecs_sg_rules
 
-  # Load Balancer Attachment (Dùng ARN từ module target_group)
-  load_balancer = lookup(local.service_cfg.load_balancer, "container_name", "") != "" ? {
+  # Load Balancer Attachment
+  load_balancer = lookup(local.service_cfg.load_balancer, "container_name", "") != "" && length(aws_lb_target_group.app) > 0 ? {
     service = {
-      target_group_arn = module.lb_resources.target_group_arns[0]
+      target_group_arn = aws_lb_target_group.app[0].arn
       container_name   = local.service_cfg.load_balancer.container_name
       container_port   = local.service_cfg.load_balancer.container_port
     }
@@ -92,7 +94,7 @@ module "ecs_service" {
   health_check_grace_period_seconds = local.service_cfg.health_check_grace_period
   enable_execute_command            = local.service_cfg.enable_execute_command
   force_new_deployment              = local.service_cfg.force_new_deployment
-  
+
   deployment_circuit_breaker = {
     enable   = true
     rollback = true

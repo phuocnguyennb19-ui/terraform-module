@@ -1,32 +1,54 @@
 variable "public_subnets" {
-  type    = list(string)
-  default = null
+  description = "List of public subnet IDs for internet-facing ALB"
+  type        = list(string)
+  default     = null
 }
+
+variable "private_subnets" {
+  description = "List of private subnet IDs for internal ALB"
+  type        = list(string)
+  default     = null
+}
+
 variable "vpc_id" {
-  type    = string
-  default = null
-}
-
-variable "manual_config" {
-  description = "Manual configuration object (Alternative to config.yml)"
-  type        = any
-  default     = {}
-}
-
-variable "config_file" {
-  description = "Name of the configuration file to load (e.g., config.yml)"
+  description = "VPC ID for security group creation"
   type        = string
-  default     = "config.yml"
+  default     = null
+}
+
+variable "vpc_cidr_block" {
+  description = "VPC CIDR block — used to scope ingress rules"
+  type        = string
+  default     = "10.0.0.0/16"
 }
 
 variable "global_config" {
-  description = "Global configuration object from engine"
-  type        = any
-  default     = {}
+  type = object({
+    environment = string
+    region      = string
+    project     = string
+    managed_by  = optional(string, "DylanDevOps")
+    cost_center = optional(string, "shared-services")
+    tags        = optional(map(string), {})
+  })
+
+  validation {
+    condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
+    error_message = "Biến environment phải là một trong các giá trị: dev, test, staging, preprod, prod."
+  }
+}
+
+variable "config_file" {
+  type    = string
+  default = "config.yml"
+}
+
+variable "manual_config" {
+  type    = any
+  default = {}
 }
 
 variable "tags" {
-  description = "Standard tags from engine"
-  type        = map(string)
-  default     = {}
+  type    = map(string)
+  default = {}
 }

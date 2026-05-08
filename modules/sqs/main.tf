@@ -13,9 +13,18 @@ module "sqs" {
   delay_seconds              = lookup(each.value, "delay_seconds", 0)
   receive_wait_time_seconds  = lookup(each.value, "receive_wait_time_seconds", 0)
 
-  create_queue_policy = lookup(each.value, "policy", null) != null || lookup(each.value, "queue_policy_statements", null) != null
+  # Encryption at rest
+  kms_master_key_id                 = lookup(each.value, "kms_master_key_id", null)
+  kms_data_key_reuse_period_seconds = lookup(each.value, "kms_data_key_reuse_period_seconds", 300)
+  sqs_managed_sse_enabled           = lookup(each.value, "kms_master_key_id", null) == null
+
+  # Dead Letter Queue
+  redrive_policy       = lookup(each.value, "redrive_policy", {})
+  redrive_allow_policy = lookup(each.value, "redrive_allow_policy", {})
+
+  create_queue_policy           = lookup(each.value, "policy", null) != null || lookup(each.value, "queue_policy_statements", null) != null
   source_queue_policy_documents = lookup(each.value, "policy", null) != null ? [each.value.policy] : []
-  queue_policy_statements = lookup(each.value, "queue_policy_statements", {})
+  queue_policy_statements       = lookup(each.value, "queue_policy_statements", {})
 
   tags = local.tags
 }

@@ -6,8 +6,13 @@ module "ecr" {
   repository_name = each.key
   repository_type = "private"
 
-  repository_image_tag_mutability   = local.ecr_config.image_tag_mutability
-  repository_read_write_access_arns = [] # Map if needed in future
+  repository_image_tag_mutability    = local.ecr_config.image_tag_mutability
+  repository_force_delete            = local.ecr_config.repository_force_delete
+  repository_read_access_arns        = local.ecr_config.read_access_arns
+  repository_read_write_access_arns  = local.ecr_config.read_write_access_arns
+
+  repository_encryption_type = local.ecr_config.encryption_type
+  repository_kms_key         = local.ecr_config.kms_key
 
   # Image Scanning
   repository_image_scan_on_push = local.ecr_config.scan_on_push

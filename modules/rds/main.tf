@@ -50,21 +50,29 @@ module "db" {
   vpc_security_group_ids = [module.rds_sg.security_group_id]
 
   # Backup & Maintenance
-  maintenance_window      = "Mon:00:00-Mon:03:00"
-  backup_window           = "03:00-06:00"
+  maintenance_window      = local.rds_config.maintenance_window
+  backup_window           = local.rds_config.backup_window
   backup_retention_period = local.rds_config.backup_retention_period
   skip_final_snapshot     = local.rds_config.skip_final_snapshot
+  copy_tags_to_snapshot   = local.rds_config.copy_tags_to_snapshot
 
   # High Availability & Security
   multi_az                        = local.rds_config.multi_az
   performance_insights_enabled    = local.rds_config.performance_insights_enabled
   monitoring_interval             = local.rds_config.monitoring_interval
   enabled_cloudwatch_logs_exports = local.rds_config.enabled_cloudwatch_logs_exports
-  
+
   # Security Enforcements
-  storage_encrypted   = true
-  publicly_accessible = false
-  deletion_protection = local.env == "prod" ? true : lookup(local.rds_config, "deletion_protection", false)
+  storage_encrypted                   = true
+  publicly_accessible                 = false
+  deletion_protection                 = local.env == "prod" ? true : local.rds_config.deletion_protection
+  kms_key_id                          = local.rds_config.kms_key_id
+  iam_database_authentication_enabled = local.rds_config.iam_database_authentication_enabled
+  ca_cert_identifier                  = local.rds_config.ca_cert_identifier
+
+  # Operational
+  apply_immediately          = local.rds_config.apply_immediately
+  auto_minor_version_upgrade = local.rds_config.auto_minor_version_upgrade
 
   tags = local.tags
 }

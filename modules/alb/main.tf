@@ -41,13 +41,20 @@ module "alb" {
   idle_timeout       = local.alb_config.idle_timeout
 
   vpc_id  = var.vpc_id
-  subnets = var.public_subnets
+  subnets = local.alb_config.internal ? coalesce(var.private_subnets, var.public_subnets) : var.public_subnets
 
   # Security Groups
   security_groups = [module.alb_sg.security_group_id]
 
   enable_deletion_protection = local.alb_config.enable_deletion_protection
   drop_invalid_header_fields = local.alb_config.drop_invalid_header_fields
+  preserve_host_header       = local.alb_config.preserve_host_header
+  xff_header_processing_mode = local.alb_config.xff_header_processing_mode
+  desync_mitigation_mode     = local.alb_config.desync_mitigation_mode
+  enable_waf_fail_open       = local.alb_config.enable_waf_fail_open
+
+  access_logs     = local.alb_config.access_logs
+  connection_logs = local.alb_config.connection_logs
 
   # V9 Migration: Chuyển sang dùng Maps
   listeners     = local.listeners

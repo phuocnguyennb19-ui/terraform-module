@@ -3,9 +3,14 @@ module "kms" {
 
   description             = local.kms_config.description
   deletion_window_in_days = local.kms_config.deletion_window_in_days
+  key_usage               = local.kms_config.key_usage
+  customer_master_key_spec = local.kms_config.customer_master_key_spec
+  multi_region            = local.kms_config.multi_region
 
-  # Security: Key Rotation (Mandatory)
-  enable_key_rotation = true
+  enable_key_rotation      = true
+  rotation_period_in_days  = local.kms_config.rotation_period_in_days
+
+  policy = local.kms_config.policy
 
   aliases = local.kms_config.aliases
 

@@ -33,6 +33,16 @@ module "iam_assumable_role_factory" {
   tags = local.tags
 }
 
+# 2b. Instance Profile Factory (optional — for EC2 roles)
+resource "aws_iam_instance_profile" "this" {
+  for_each = { for k, v in local.roles : k => v if lookup(v, "create_instance_profile", false) }
+
+  name = each.key
+  role = module.iam_assumable_role_factory[each.key].iam_role_name
+
+  tags = local.tags
+}
+
 # 3. Legacy/Default Role Support (Backward compatible with single role config)
 module "iam_assumable_role_default" {
   count  = length(keys(local.roles)) == 0 ? 1 : 0

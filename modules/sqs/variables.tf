@@ -1,23 +1,30 @@
 variable "global_config" {
-  description = "Global configuration from config.yml"
-  type        = any
-  default     = {}
-}
+  type = object({
+    environment = string
+    region      = string
+    project     = string
+    managed_by  = optional(string, "DylanDevOps")
+    cost_center = optional(string, "shared-services")
+    tags        = optional(map(string), {})
+  })
 
-variable "tags" {
-  description = "Additional tags for resources"
-  type        = map(string)
-  default     = {}
+  validation {
+    condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
+    error_message = "Biến environment phải là một trong các giá trị: dev, test, staging, preprod, prod."
+  }
 }
 
 variable "config_file" {
-  description = "The name of the configuration file to load"
-  type        = string
-  default     = "config.yml"
+  type    = string
+  default = "config.yml"
 }
 
 variable "manual_config" {
-  description = "Manual configuration to override file config"
-  type        = any
-  default     = {}
+  type    = any
+  default = {}
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
 }

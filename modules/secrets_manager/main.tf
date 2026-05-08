@@ -1,12 +1,16 @@
 module "secrets_manager" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-secrets-manager.git?ref=v1.1.0"
+  for_each = local.secrets
+  source   = "git::https://github.com/terraform-aws-modules/terraform-aws-secrets-manager.git?ref=v1.1.0"
 
-  name        = local.secrets_manager_config.name
-  description = local.secrets_manager_config.description
+  name        = each.value.name
+  description = each.value.description
 
-  recovery_window_in_days = local.secrets_manager_config.recovery_window_in_days
+  recovery_window_in_days = each.value.recovery_window_in_days
+  kms_key_id              = each.value.kms_key_id
+  ignore_secret_changes   = each.value.ignore_secret_changes
 
-  kms_key_id = local.secrets_manager_config.kms_key_id
+  rotation_lambda_arn = each.value.rotation_lambda_arn
+  rotation_rules      = each.value.rotation_rules
 
   tags = local.tags
 }

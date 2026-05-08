@@ -1,8 +1,7 @@
 module "s3_bucket" {
   source = "git::https://github.com/terraform-aws-modules/terraform-aws-s3-bucket.git?ref=v4.2.1"
-  
-  # Security Enforcements
-  force_destroy = false
+
+  force_destroy = local.s3_config.force_destroy
 
   bucket = local.s3_config.bucket
   acl    = "private"
@@ -38,6 +37,15 @@ module "s3_bucket" {
   cors_rule           = local.s3_config.cors_rule
   logging             = local.s3_config.logging
   acceleration_status = local.s3_config.acceleration_status
+  website             = local.s3_config.website
+
+  object_lock_enabled       = local.s3_config.object_lock_enabled
+  object_lock_configuration = local.s3_config.object_lock_configuration
+
+  intelligent_tiering          = local.s3_config.intelligent_tiering
+  metric_configuration         = local.s3_config.metric_configuration
+  replication_configuration    = local.s3_config.replication_configuration
+  notification_configurations  = local.s3_config.notification_configurations
 
   tags = local.tags
 }

@@ -1,5 +1,4 @@
 locals {
-
   # 2. Local Module Config (Support dynamic config file name)
   config_local = merge(
     try(yamldecode(file("${path.cwd}/${var.config_file}")), {}),
@@ -7,20 +6,27 @@ locals {
   )
 
   # 3. Context & Naming (Strict mapping from config.yml)
-  env          = lookup(var.global_config, "environment", null)
-  region       = lookup(var.global_config, "region", null)
-  project      = lookup(var.global_config, "project", null)
+  env          = lookup(var.global_config, "environment", "dev")
+  region       = lookup(var.global_config, "region", "ap-southeast-1")
+  project      = lookup(var.global_config, "project", "core")
   app_name     = lookup(local.config_local, "app_name", null)
   service_type = lookup(local.config_local, "service_type", "infra")
-  name_prefix  = local.app_name == "base" || local.app_name == null ? "${local.env}-${local.project}" : "${local.env}-${local.app_name}-${local.service_type}"
+  name_prefix  = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
 
   # 4. ALB Configuration (Full-Spec for v9.x)
+  raw_alb_cfg = try(local.config_local.alb, {})
   alb_defaults = {
-    name                       = "${local.name_prefix}-alb"
-    internal                   = lookup(local.config_local.alb, "internal", false)
-    idle_timeout               = lookup(local.config_local.alb, "idle_timeout", 60)
-    enable_deletion_protection = lookup(local.config_local.alb, "enable_deletion_protection", local.env == "prod")
-    drop_invalid_header_fields = lookup(local.config_local.alb, "drop_invalid_header_fields", true)
+    name                        = "${local.name_prefix}-alb"
+    internal                    = lookup(local.raw_alb_cfg, "internal", false)
+    idle_timeout                = lookup(local.raw_alb_cfg, "idle_timeout", 60)
+    enable_deletion_protection  = lookup(local.raw_alb_cfg, "enable_deletion_protection", local.env == "prod")
+    drop_invalid_header_fields  = lookup(local.raw_alb_cfg, "drop_invalid_header_fields", true)
+    preserve_host_header        = lookup(local.raw_alb_cfg, "preserve_host_header", false)
+    xff_header_processing_mode  = lookup(local.raw_alb_cfg, "xff_header_processing_mode", "append")
+    desync_mitigation_mode      = lookup(local.raw_alb_cfg, "desync_mitigation_mode", "defensive")
+    enable_waf_fail_open        = lookup(local.raw_alb_cfg, "enable_waf_fail_open", false)
+    access_logs = lookup(local.raw_alb_cfg, "access_logs", {})
+    connection_logs = lookup(local.raw_alb_cfg, "connection_logs", {})
   }
   alb_config = merge(local.alb_defaults, try(local.config_local.alb, {}))
 
@@ -63,11 +69,12 @@ locals {
   # 5. Global Alias & Tags
   config = local.config_local
   tags = merge(
-    { 
-      Environment = local.env, 
-      Project     = local.project, 
+    {
+      Environment = local.env,
+      Project     = local.project,
       ManagedBy   = lookup(var.global_config, "managed_by", "DylanDevOps"),
-      Terraform   = "true" 
+      CostCenter  = lookup(var.global_config, "cost_center", "shared-services"),
+      Terraform   = "true"
     },
     var.tags, try(var.global_config.tags, {})
   )

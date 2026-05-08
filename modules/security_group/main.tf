@@ -15,5 +15,11 @@ module "security_group" {
   egress_rules       = local.sg_config.egress_rules
   egress_cidr_blocks = local.sg_config.egress_cidr_blocks
 
+  # Source SG Rules
+  ingress_with_source_security_group_id = local.sg_config.ingress_with_source_security_group_id
+  egress_with_source_security_group_id  = local.sg_config.egress_with_source_security_group_id
+
+  revoke_rules_on_delete = local.sg_config.revoke_rules_on_delete
+
   tags = local.tags
 }

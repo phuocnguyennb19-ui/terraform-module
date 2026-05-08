@@ -7,12 +7,12 @@ locals {
   )
 
   # 3. Context & Naming (Strict mapping from config.yml)
-  env          = lookup(var.global_config, "environment", null)
-  region       = lookup(var.global_config, "region", null)
-  project      = lookup(var.global_config, "project", null)
+  env          = lookup(var.global_config, "environment", "dev")
+  region       = lookup(var.global_config, "region", "ap-southeast-1")
+  project      = lookup(var.global_config, "project", "core")
   app_name     = lookup(local.config_local, "app_name", null)
   service_type = lookup(local.config_local, "service_type", "infra")
-  name_prefix  = local.app_name == "base" || local.app_name == null ? "${local.env}-${local.project}" : "${local.env}-${local.app_name}-${local.service_type}"
+  name_prefix  = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
 
   # 4. Smart Mapping for service
   raw_service_cfg = merge(
@@ -109,12 +109,27 @@ locals {
       container_port = try(local.raw_service_cfg.port, try(local.config_local.port, null))
     })
 
+    # Health check
+    health_check_path    = try(local.raw_service_cfg.health_check_path, "/")
+    health_check_matcher = try(local.raw_service_cfg.health_check_matcher, "200")
+
+    # Listener Rule
+    priority    = try(local.raw_service_cfg.priority, null)
+    host_header = try(local.raw_service_cfg.host_header, null)
+
     # Deployment & Runtime
     health_check_grace_period  = try(local.raw_service_cfg.health_check_grace_period, 30)
     enable_execute_command     = try(local.raw_service_cfg.enable_execute_command, false)
     force_new_deployment       = try(local.raw_service_cfg.force_new_deployment, false)
     deployment_controller_type = try(local.raw_service_cfg.deployment_controller_type, "ECS")
     propagate_tags             = try(local.raw_service_cfg.propagate_tags, "SERVICE")
+    platform_version           = try(local.raw_service_cfg.platform_version, "LATEST")
+    scheduling_strategy        = try(local.raw_service_cfg.scheduling_strategy, "REPLICA")
+    wait_for_steady_state      = try(local.raw_service_cfg.wait_for_steady_state, false)
+    assign_public_ip           = try(local.raw_service_cfg.assign_public_ip, false)
+
+    # Capacity provider (optional — override default FARGATE strategy)
+    capacity_provider_strategy = try(local.raw_service_cfg.capacity_provider_strategy, [])
 
     # Network
     subnet_ids         = lookup(lookup(try(local.raw_service_cfg.network_configuration.awsvpc_configuration, {}), "subnets", {}), "subnets", null)
@@ -156,7 +171,7 @@ locals {
     } : {}
   )
 
-  # 8. Security Group Rules (Dynamic - Using For loop to ensure type consistency)
+  # 8. Security Group Rules — egress restricted to VPC CIDR only
   ecs_sg_rules = {
     for k, v in {
       alb_ingress = {
@@ -164,14 +179,23 @@ locals {
         from_port   = lookup(local.service_cfg.load_balancer, "container_port", 80)
         to_port     = lookup(local.service_cfg.load_balancer, "container_port", 80)
         protocol    = "tcp"
-        description = "Allow traffic from ALB"
-        cidr_blocks = [try(var.vpc_cidr_block, "10.0.0.0/16")]
+        description = "Allow inbound traffic from ALB within VPC"
+        cidr_blocks = [var.vpc_cidr_block]
       }
-      egress_all = {
+      egress_vpc = {
         type        = "egress"
         from_port   = 0
         to_port     = 0
         protocol    = "-1"
+        description = "Allow all egress within VPC"
+        cidr_blocks = [var.vpc_cidr_block]
+      }
+      egress_https = {
+        type        = "egress"
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        description = "Allow HTTPS to internet (AWS APIs, ECR, Secrets Manager)"
         cidr_blocks = ["0.0.0.0/0"]
       }
     } : k => v if local.service_cfg.security_group_ids == null
@@ -180,11 +204,12 @@ locals {
   # 9. Global Alias & Tags
   config = local.config_local
   tags = merge(
-    { 
-      Environment = local.env, 
-      Project     = local.project, 
+    {
+      Environment = local.env,
+      Project     = local.project,
       ManagedBy   = lookup(var.global_config, "managed_by", "DylanDevOps"),
-      Terraform   = "true" 
+      CostCenter  = lookup(var.global_config, "cost_center", "shared-services"),
+      Terraform   = "true"
     },
     var.tags,
     try(var.global_config.tags, {})
