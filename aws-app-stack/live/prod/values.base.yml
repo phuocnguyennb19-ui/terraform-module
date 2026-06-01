@@ -1,0 +1,280 @@
+# ════════════════════════════════════════════════════════════════════════════
+# SINGLE SOURCE OF TRUTH — live/prod/values.base.yml
+# Root terragrunt.hcl đọc section global để lấy region + account
+# Mỗi stack đọc section riêng: local.all[basename(get_terragrunt_dir())]
+# Override per-stack: tạo values.override.yml trong folder stack
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── GLOBAL (root terragrunt.hcl đọc) ─────────────────────────────────────────
+global:
+  region:     "ap-southeast-1"
+  account_id: "123456789012"
+  # deploy_role_arn: "arn:aws:iam::123456789012:role/TerraformDeployRole"  # multi-account
+
+# ── VPC ───────────────────────────────────────────────────────────────────────
+vpc:
+  name:        "devops"
+  environment: "prod"
+  vpc_cidr:    "10.0.0.0/16"
+
+  availability_zones:
+    - "ap-southeast-1a"
+    - "ap-southeast-1b"
+    - "ap-southeast-1c"
+
+  private_subnet_cidrs:
+    - "10.0.1.0/24"
+    - "10.0.2.0/24"
+    - "10.0.3.0/24"
+
+  public_subnet_cidrs:
+    - "10.0.101.0/24"
+    - "10.0.102.0/24"
+    - "10.0.103.0/24"
+
+  database_subnet_cidrs:
+    - "10.0.201.0/24"
+    - "10.0.202.0/24"
+    - "10.0.203.0/24"
+
+  single_nat_gateway: false   # prod: false | staging: true
+  enable_flow_log:    true
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ECR ───────────────────────────────────────────────────────────────────────
+ecr:
+  name:        "api-service"
+  environment: "prod"
+
+  image_tag_mutability: "IMMUTABLE"
+  scan_on_push:         true
+  encryption_type:      "KMS"
+  force_delete:         false
+
+  lifecycle:
+    untagged_expire_days: 1
+    tagged_keep_count:    30
+    tagged_prefix_list:   ["v", "release", "prod"]
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ROUTE53 (zone only) ───────────────────────────────────────────────────────
+route53:
+  zone_name: "devops.example.com"
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ACM ───────────────────────────────────────────────────────────────────────
+acm:
+  domain_name: "api.devops.example.com"
+  subject_alternative_names:
+    - "*.devops.example.com"
+  wait_for_validation: true
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ALB ───────────────────────────────────────────────────────────────────────
+alb:
+  name:        "devops"
+  environment: "prod"
+
+  create:                true
+  create_security_group: true
+
+  container_port:    8080
+  health_check_path: "/health"
+
+  health_check:
+    healthy_threshold:   2
+    unhealthy_threshold: 3
+    interval:            30
+    timeout:             10
+    matcher:             "200-299"
+
+  enable_deletion_protection: true
+
+  access_logs:
+    enabled: false
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ECS ───────────────────────────────────────────────────────────────────────
+ecs:
+  app_name:        "api-service"
+  environment:     "prod"
+  container_image: "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/api-service:v1.0"
+
+  capacity_type: "MIXED"   # FARGATE | FARGATE_SPOT | MIXED | EC2
+
+  container_port: 8080
+  cpu:            512
+  memory:         1024
+  desired_count:  3
+
+  environment_vars:
+    APP_ENV:   "production"
+    LOG_LEVEL: "info"
+
+  # secrets_vars:
+  #   DB_PASSWORD: "arn:aws:ssm:ap-southeast-1:123456789012:parameter/prod/db_password"
+
+  force_new_deployment:               true
+  health_check_grace_period_seconds:  60
+  enable_execute_command:             false
+  deployment_maximum_percent:         200
+  deployment_minimum_healthy_percent: 66
+
+  autoscaling_min_capacity:  2
+  autoscaling_max_capacity:  10
+  autoscaling_cpu_target:    70
+  autoscaling_memory_target: 80
+  scale_in_cooldown:         300
+  scale_out_cooldown:        60
+
+  container_insights: true
+  log_retention_days: 90
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── RDS ───────────────────────────────────────────────────────────────────────
+rds:
+  name:        "devops"
+  environment: "prod"
+  db_name:     "devops_prod"
+  username:    "devops_admin"
+
+  engine:         "postgres"
+  engine_version: "17"
+  family:         "postgres17"
+
+  instance_class:        "db.t4g.medium"
+  allocated_storage:     20
+  max_allocated_storage: 100
+
+  multi_az:          true
+  storage_encrypted: true
+  kms_key_id:        null
+
+  backup_retention_period:    7
+  backup_window:              "03:00-04:00"
+  maintenance_window:         "Mon:04:00-Mon:05:00"
+  deletion_protection:        true
+  skip_final_snapshot:        false
+  auto_minor_version_upgrade: true
+
+  performance_insights:
+    enabled:          true
+    retention_period: 7
+
+  monitoring:
+    interval:    60
+    create_role: true
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ROUTE53-RECORDS (A alias → ALB) ──────────────────────────────────────────
+route53-records:
+  zone_name:       "devops.example.com"
+  alb_record_name: "api"
+  records: {}
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── ELASTICACHE (Redis) ────────────────────────────────────────────────────────
+elasticache:
+  name:        "devops"
+  environment: "prod"
+
+  engine:         "redis"
+  engine_version: "7.1"
+  node_type:      "cache.t4g.micro"
+
+  cluster_mode:
+    enabled:                false   # true = Redis cluster/sharding
+    num_node_groups:        1
+    replicas_per_node_group: 1
+
+  num_cache_nodes:            1     # dùng khi cluster_mode.enabled = false
+  automatic_failover_enabled: true
+  multi_az_enabled:           true
+  at_rest_encryption_enabled: true
+  transit_encryption_enabled: true
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── S3-CDN (Static site / Frontend) ───────────────────────────────────────────
+s3-cdn:
+  name:        "devops"
+  environment: "prod"
+
+  versioning_enabled:  false
+  force_destroy:       false
+  create_cloudfront:   true
+  price_class:         "PriceClass_100"   # 100=US+EU | 200=+Asia | All=global
+  default_root_object: "index.html"
+  aliases:             []                 # custom domain: ["app.devops.example.com"]
+
+  # acm_certificate_arn: null  # cần cert ở us-east-1 cho CloudFront
+
+  # SPA routing: redirect 403/404 → index.html
+  custom_error_responses:
+    - error_code: 403
+    - error_code: 404
+
+  cache_ttl:
+    default: 86400     # 1 day
+    min:     0
+    max:     31536000  # 1 year
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"
+
+# ── LAMBDA ────────────────────────────────────────────────────────────────────
+lambda:
+  name:        "devops-worker"
+  environment: "prod"
+
+  handler:     "index.handler"
+  runtime:     "nodejs20.x"
+  memory_size: 256
+  timeout:     30
+  publish:     true
+
+  # source_path: "./src"               # local build
+  # s3_existing_package:               # S3 package (CI/CD upload trước)
+  #   bucket:     "my-lambda-packages"
+  #   key:        "devops-worker/v1.0.zip"
+
+  environment_variables:
+    APP_ENV:   "production"
+    LOG_LEVEL: "info"
+
+  # VPC access (optional — bỏ trống nếu không cần RDS/ElastiCache)
+  # vpc_subnet_ids:         []
+  # vpc_security_group_ids: []
+
+  create_lambda_function_url: false   # true = public URL không cần API GW
+  attach_policy_arns:         []
+
+  reserved_concurrent_executions: -1   # -1=unlimited | 0=throttle | N=limit
+
+  tags:
+    Project:   "devops"
+    ManagedBy: "terragrunt"

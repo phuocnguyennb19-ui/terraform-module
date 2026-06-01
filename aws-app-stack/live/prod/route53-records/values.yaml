@@ -1,0 +1,17 @@
+zone_name: "devops.example.com"
+
+# Subdomain trỏ vào ALB — alb_dns_name/zone_id lấy từ dependency "alb"
+alb_record_name: "api"   # → api.devops.example.com
+
+# Static records tùy chọn
+# records:
+#   www:
+#     type:    "CNAME"
+#     ttl:     300
+#     records: ["api.devops.example.com"]
+
+records: {}
+
+tags:
+  Project:   "devops"
+  ManagedBy: "terragrunt"

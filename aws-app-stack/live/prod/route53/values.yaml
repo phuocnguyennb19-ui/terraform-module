@@ -1,0 +1,30 @@
+zone_name: "devops.example.com"
+
+# ── ALB alias record ──────────────────────────────────────────────────────────
+# alb_dns_name và alb_zone_id tự động lấy từ dependency "alb" trong terragrunt.hcl
+# Chỉ cần khai báo subdomain muốn trỏ vào ALB
+alb_record_name: "api"   # → api.devops.example.com
+
+# ── Static records (optional) ─────────────────────────────────────────────────
+# Thêm bất kỳ record tĩnh nào ở đây (MX, TXT, CNAME, v.v.)
+# records:
+#   www:
+#     type:    "CNAME"
+#     ttl:     300
+#     records: ["api.devops.example.com"]
+#
+#   "@":
+#     type:    "MX"
+#     ttl:     300
+#     records: ["10 mail.example.com"]
+#
+#   _dmarc:
+#     type:    "TXT"
+#     ttl:     300
+#     records: ["v=DMARC1; p=none"]
+
+records: {}   # static records — để trống nếu chỉ cần ALB alias
+
+tags:
+  Project:   "devops"
+  ManagedBy: "terragrunt"

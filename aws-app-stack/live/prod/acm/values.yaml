@@ -1,0 +1,9 @@
+domain_name: "api.devops.example.com"
+subject_alternative_names:
+  - "*.devops.example.com"
+
+wait_for_validation: true
+
+tags:
+  Project:   "devops"
+  ManagedBy: "terragrunt"

@@ -1,0 +1,19 @@
+# values.override.yml — copy file này, bỏ .example, sửa những gì cần
+#
+# OVERWRITE: key đã có trong values.base.yml → giá trị ở đây thắng
+# ADDITIONAL: key chưa có → được bổ sung thêm vào cfg
+#
+# Không cần khai báo lại toàn bộ — chỉ những gì khác base
+
+# --- Ví dụ overwrite ---
+# container_image: "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/api-service:v1.1-hotfix"
+# desired_count:   5
+
+# --- Ví dụ bổ sung ---
+# enable_execute_command: true
+# secrets_vars:
+#   DB_PASSWORD: "arn:aws:ssm:ap-southeast-1:123456789012:parameter/prod/db_password"
+
+# --- Tags luôn được deep-merge (không mất tags từ base) ---
+# tags:
+#   Hotfix: "INC-2024-001"

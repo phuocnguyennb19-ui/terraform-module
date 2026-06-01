@@ -1,0 +1,16 @@
+name:        "api-service"
+environment: "prod"
+
+image_tag_mutability: "IMMUTABLE"
+scan_on_push:         true
+encryption_type:      "KMS"
+force_delete:         false
+
+lifecycle:
+  untagged_expire_days: 1
+  tagged_keep_count:    30
+  tagged_prefix_list:   ["v", "release", "prod"]
+
+tags:
+  Project:   "devops"
+  ManagedBy: "terragrunt"

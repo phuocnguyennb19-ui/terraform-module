@@ -1,0 +1,23 @@
+name:        "devops"
+environment: "prod"
+
+# ── create_* toggles ──────────────────────────────────────────────────────────
+create:                true
+create_security_group: true   # false nếu truyền sg ARN có sẵn từ ngoài
+
+# ── Config ────────────────────────────────────────────────────────────────────
+container_port:    8080
+health_check_path: "/health"
+
+health_check:
+  healthy_threshold:   2
+  unhealthy_threshold: 3
+  interval:            30
+  timeout:             10
+  matcher:             "200-299"
+
+enable_deletion_protection: true   # bật trên prod, tắt khi cần destroy
+
+tags:
+  Project:    "devops"
+  ManagedBy:  "terragrunt"
