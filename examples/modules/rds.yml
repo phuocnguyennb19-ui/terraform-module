@@ -1,0 +1,45 @@
+# ==============================================================================
+# rds — config reference
+# ==============================================================================
+# Read by modules/rds/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Needs `vpc_id`, `vpc_cidr_block`, `private_subnets` (database subnets) from the root.
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+rds:
+  enabled: false
+  engine: "postgres"
+  engine_version: "16.3"
+  major_engine_version: "16"
+  family: "postgres16"
+  instance_class: "db.t4g.micro"                 # prod: db.m6g.large
+  allocated_storage: 20
+  max_allocated_storage: 100                     # 0 disables storage autoscaling
+  storage_type: "gp3"
+  storage_throughput: null
+  iops: null
+  multi_az: false                                # true in prod
+  port: 5432
+  username: "appuser"                            # password is an AWS-managed secret
+  backup_retention_period: 7                     # 0 disables backups — never in prod
+  backup_window: "17:00-18:00"                   # UTC
+  maintenance_window: "Sun:18:00-Sun:19:00"
+  deletion_protection: true
+  skip_final_snapshot: false
+  final_snapshot_identifier_prefix: "final"
+  copy_tags_to_snapshot: true
+  apply_immediately: false                       # true restarts outside the window
+  auto_minor_version_upgrade: true
+  performance_insights_enabled: true
+  monitoring_interval: 60                        # 0 disables enhanced monitoring
+  enabled_cloudwatch_logs_exports: ["postgresql", "upgrade"]
+  iam_database_authentication_enabled: true
+  kms_key_id: null
+  ca_cert_identifier: "rds-ca-rsa2048-g1"

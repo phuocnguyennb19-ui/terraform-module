@@ -8,7 +8,7 @@ module "elasticache" {
   engine_version  = local.elasticache_config.engine_version
   port            = local.elasticache_config.port
 
-  # Network — nhận từ orchestrator
+  # Network — supplied by the caller
   subnet_ids = var.private_subnets
 
   # Security

@@ -15,12 +15,36 @@ locals {
   name_prefix  = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
 
   # 4. Route53 Config (Full-Spec)
-  raw_dns_cfg = try(local.config_local.dns, try(local.config_local.route53, {}))
+  raw_dns_cfg      = try(local.config_local.dns, try(local.config_local.route53, {}))
+  raw_record_zones = lookup(local.raw_dns_cfg, "records", {})
+
+  # Alias targets the caller wired in. CloudFront always sits in this fixed zone.
+  alias_targets = {
+    alb        = { name = var.alb_dns_name, zone_id = var.alb_zone_id }
+    cloudfront = { name = var.cloudfront_domain_name, zone_id = "Z2FDTNDATAQYW2" }
+  }
+
+  # A record may declare either a literal alias {name, zone_id} — passed through
+  # untouched — or alias.target = "<key>", resolved from alias_targets above.
+  record_zones = {
+    for zone, recs in local.raw_record_zones : zone => [
+      for r in recs :
+      try(r.alias.target, null) != null
+      ? merge(r, {
+        alias = merge(
+          { evaluate_target_health = try(r.alias.evaluate_target_health, true) },
+          local.alias_targets[r.alias.target],
+        )
+      })
+      : r
+    ]
+  }
+
   dns_defaults = {
     zones        = lookup(local.raw_dns_cfg, "zones", {})
-    record_zones = lookup(local.raw_dns_cfg, "records", {})
+    record_zones = local.record_zones
   }
-  dns_config = merge(local.dns_defaults, local.raw_dns_cfg)
+  dns_config = merge(local.dns_defaults, local.raw_dns_cfg, { record_zones = local.record_zones })
 
   # 6. Global Alias & Tags
   config = local.config_local

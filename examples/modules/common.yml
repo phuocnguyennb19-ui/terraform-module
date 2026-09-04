@@ -1,0 +1,47 @@
+# ==============================================================================
+# common.yml — the base every module in this directory starts from
+# ==============================================================================
+# REQUIRED in directory mode. A missing common.yml is a hard error, on purpose:
+# silently falling back to defaults is how an environment gets built wrong.
+#
+#   terraform plan -var="config_dir=examples/modules"
+#
+# Precedence, lowest to highest:
+#   module defaults (locals.tf)  ->  common.yml  ->  <module>.yml
+#
+# The merge is TWO LEVELS DEEP. A per-module file overrides individual keys
+# inside a block without discarding the rest of that block from here. Lists are
+# replaced wholesale, not concatenated. See README §4.5.
+# ==============================================================================
+
+global:
+  environment: "dev"                  # VALIDATED: dev | test | staging | preprod | prod
+  region: "ap-southeast-1"
+  project: "SM-Platform"
+  aws_profile: "personal-dev"         # read by the root for the provider only
+  managed_by: "DylanDevOps"
+  cost_center: "engineering"
+  tags:
+    Owner: "platform-team"
+    DataClass: "internal"
+
+app_name: "base"
+service_type: "infra"
+
+# ---- shared defaults ---------------------------------------------------------
+# These are deliberately overridden by the per-module files, to demonstrate that
+# a targeted override does not wipe the rest of the block:
+#
+#   kms.yml sets deletion_window_in_days: 7   (overrides the 30 below)
+#   s3.yml  sets force_destroy: true          (overrides the false below)
+#
+# Everything else in those blocks survives from here.
+
+kms:
+  deletion_window_in_days: 30
+
+s3:
+  versioning_enabled: true
+  block_public_acls: true
+  block_public_policy: true
+  force_destroy: false

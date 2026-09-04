@@ -10,7 +10,7 @@ variable "global_config" {
 
   validation {
     condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
-    error_message = "Biến environment phải là một trong các giá trị: dev, test, staging, preprod, prod."
+    error_message = "environment must be one of: dev, test, staging, preprod, prod."
   }
 }
 
@@ -27,4 +27,27 @@ variable "manual_config" {
 variable "tags" {
   type    = map(string)
   default = {}
+}
+
+# ---- wiring inputs, supplied by the caller -----------------------------------
+# A Route53 alias needs the target's DNS name and hosted-zone ID, which are
+# outputs of another module, not values anyone can put in YAML. A record declares
+# `alias: { target: "alb" }` and the module substitutes what the caller passed in.
+
+variable "alb_dns_name" {
+  description = "DNS name of the ALB, for records using alias.target = \"alb\"."
+  type        = string
+  default     = null
+}
+
+variable "alb_zone_id" {
+  description = "Hosted zone ID of the ALB, for records using alias.target = \"alb\"."
+  type        = string
+  default     = null
+}
+
+variable "cloudfront_domain_name" {
+  description = "CloudFront domain, for records using alias.target = \"cloudfront\"."
+  type        = string
+  default     = null
 }

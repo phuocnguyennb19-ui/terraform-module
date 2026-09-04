@@ -1,4 +1,4 @@
-# Chuẩn hóa: Sử dụng module cho Security Group
+# Standardised: use the security-group module rather than inline rules
 module "rds_sg" {
   source = "git::https://github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v5.1.0"
 

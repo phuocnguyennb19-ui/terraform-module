@@ -1,0 +1,397 @@
+# ==============================================================================
+# WORKED EXAMPLE — one core service, end to end
+# ==============================================================================
+#   terraform plan -var="config_file=examples/core-service/config.yml"
+#
+# A complete, coherent stack for a single HTTPS API called "payments", plus an
+# EKS cluster sharing the same VPC. Everything here is switched ON and the values
+# reference each other correctly — this is a working shape, not a key dictionary.
+# For the exhaustive key list see examples/all-keys/config.yml and README §6.
+#
+# THE FLOW
+#
+#   Internet
+#      │  DNS: payments.dev.platform.example.com
+#      ▼
+#   Route53  ── alias ──▶  ALB  ── HTTPS:443, cert from ACM
+#      (dns)                (alb)
+#                             │  target group :8080, health check /healthz
+#                             ▼
+#                        ECS Service  ── image from ECR
+#                        (ecs_service)      (ecr)
+#                             │
+#                             ├──▶ RDS Postgres        (rds, database subnets)
+#                             ├──▶ Secrets Manager     (db password, by ARN)
+#                             └──▶ CloudWatch Logs     (cloudwatch) ──▶ SNS alerts
+#
+#   Cross-cutting:  VPC (vpc) · KMS (kms) · IAM roles (iam) · WAF (waf)
+#   Separate plane: EKS (eks) in the same private subnets
+#
+# WHAT THE ROOT WIRES (values no YAML can hold — they are outputs)
+#
+#   vpc.vpc_id, private_subnets, database_subnets  ──▶ alb, rds, ecs_*, eks
+#   alb.http_tcp_listener_arns[0]                  ──▶ ecs_service.listener_arn
+#   alb.lb_dns_name + lb_zone_id                   ──▶ dns  (alias.target: "alb")
+#   ecs_cluster.cluster_arn                        ──▶ ecs_service.cluster_arn
+#
+# Anything NOT in that list has to be a literal below, or pasted after a first
+# apply — see the alarm_actions note near the bottom.
+# ==============================================================================
+
+global:
+  environment: "dev"
+  region: "ap-southeast-1"
+  project: "SM-Platform"
+  aws_profile: "personal-dev"
+  managed_by: "DylanDevOps"
+  cost_center: "payments"
+  tags:
+    Owner: "payments-team"
+    DataClass: "confidential"
+
+# name_prefix = <env>-<app_name>-<service_type>  ->  dev-payments-api
+app_name: "payments"
+service_type: "api"
+
+# ==============================================================================
+# 1 — NETWORK
+# ==============================================================================
+
+vpc:
+  enabled: true
+  cidr: "10.40.0.0/16"
+  azs: ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
+  public_subnets:   ["10.40.0.0/20",   "10.40.16.0/20",  "10.40.32.0/20"]   # ALB
+  private_subnets:  ["10.40.64.0/19",  "10.40.96.0/19",  "10.40.128.0/19"]  # ECS + EKS
+  database_subnets: ["10.40.160.0/24", "10.40.161.0/24", "10.40.162.0/24"]  # RDS
+  enable_nat_gateway: true
+  single_nat_gateway: true          # prod: false + one_nat_gateway_per_az true
+  enable_dns_hostnames: true        # required for RDS and EKS private endpoints
+  enable_dns_support: true
+  create_database_subnet_group: true
+  enable_flow_log: true
+  flow_log_traffic_type: "REJECT"
+  public_subnet_tags:
+    Tier: "Public"
+    "kubernetes.io/role/elb": "1"           # lets EKS place public LBs here
+  private_subnet_tags:
+    Tier: "Private"
+    "kubernetes.io/role/internal-elb": "1"  # and internal ones here
+
+# ==============================================================================
+# 2 — KEYS & IDENTITY
+# ==============================================================================
+
+kms:
+  enabled: true
+  description: "Envelope key for dev-payments-api"
+  aliases: ["alias/dev-payments-api"]
+  deletion_window_in_days: 30
+  multi_region: false
+
+iam:
+  enabled: true
+  policies:
+    dev-payments-api-runtime:
+      description: "What the running task may reach"
+      policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["secretsmanager:GetSecretValue"],
+              "Resource": "arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:dev-payments-*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["sqs:SendMessage"],
+              "Resource": "arn:aws:sqs:ap-southeast-1:111122223333:dev-payments-api-jobs"
+            }
+          ]
+        }
+  roles:
+    dev-payments-api-task:
+      trusted_role_services: ["ecs-tasks.amazonaws.com"]
+      custom_policy_names: ["dev-payments-api-runtime"]
+    dev-payments-api-exec:
+      trusted_role_services: ["ecs-tasks.amazonaws.com"]
+      custom_role_policy_arns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+
+# ==============================================================================
+# 3 — EDGE:  Route53 -> ALB -> ECS
+# ==============================================================================
+
+acm:
+  enabled: true
+  domain_name: "payments.dev.platform.example.com"
+  subject_alternative_names: []
+  validation_method: "DNS"
+  wait_for_validation: true
+
+waf:
+  enabled: true
+  scope: "REGIONAL"
+  description: "Edge rules for dev-payments-api"
+  default_action: "allow"
+  rules:
+    - name: "AWSManagedRulesCommonRuleSet"
+      priority: 1
+      override_action: "none"
+      statement:
+        managed_rule_group_statement:
+          name:        "AWSManagedRulesCommonRuleSet"
+          vendor_name: "AWS"
+      visibility_config:
+        cloudwatch_metrics_enabled: true
+        metric_name: "common-rule-set"
+        sampled_requests_enabled: true
+  # The WebACL association needs the ALB ARN, which is an output. Paste it after
+  # the first apply, or associate it outside Terraform.
+  associate_alb_arns: []
+
+alb:
+  enabled: true
+  internal: false
+  idle_timeout: 60
+  drop_invalid_header_fields: true
+  enable_deletion_protection: false     # true in prod
+  security_group_ingress_rules:
+    https:
+      from_port:   443
+      to_port:     443
+      ip_protocol: "tcp"
+      description: "HTTPS from the internet"
+      cidr_ipv4:   "0.0.0.0/0"
+  listeners:
+    https:
+      port:     443
+      protocol: "HTTPS"
+      # Literal today: the ACM module's output is not wired into alb.
+      certificate_arn: "arn:aws:acm:ap-southeast-1:111122223333:certificate/REPLACE-ME"
+      forward:
+        target_group_key: "app"
+    http_redirect:
+      port:     80
+      protocol: "HTTP"
+      redirect:
+        port:        "443"
+        protocol:    "HTTPS"
+        status_code: "HTTP_301"
+  target_groups:
+    app:
+      protocol:    "HTTP"
+      port:        8080
+      target_type: "ip"                 # required for Fargate
+      health_check:
+        enabled: true
+        path:    "/healthz"
+        matcher: "200"
+
+dns:
+  enabled: true
+  zones:
+    "dev.platform.example.com":
+      comment: "Dev platform zone"
+  records:
+    "dev.platform.example.com":
+      # alias.target = "alb" is resolved by the module from the ALB outputs the
+      # root wires in. Do NOT try to write the ALB DNS name here — you cannot
+      # know it before apply.
+      - name: "payments"
+        type: "A"
+        alias:
+          target: "alb"
+          evaluate_target_health: true
+
+# ==============================================================================
+# 4 — COMPUTE:  ECS on Fargate
+# ==============================================================================
+
+ecr:
+  enabled: true
+  repository_names: ["payments-api"]
+  image_tag_mutability: "IMMUTABLE"
+  scan_on_push: true
+
+ecs:
+  enabled: true
+  cluster_name: "dev-payments-api-cluster"
+  container_insights: true
+  fargate_weight: 0
+  fargate_spot_weight: 100              # dev on spot; prod flips these
+  create_task_exec_iam_role: true
+
+service:
+  enabled: true
+  desired_count: 2
+  health_check_path: "/healthz"
+  health_check_matcher: "200"
+  health_check_grace_period: 30
+  priority: 100
+  host_header: "payments.dev.platform.example.com"
+  enable_execute_command: true          # false in prod
+  assign_public_ip: false               # tasks live in private subnets
+  wait_for_steady_state: false          # true in prod
+  load_balancer:
+    container_name: "app"
+    container_port: 8080
+  task_definition:
+    cpu: 512
+    memory: 1024
+    # Literal: the iam module's role ARNs are not wired into ecs_service.
+    execution_role_arn: "arn:aws:iam::111122223333:role/dev-payments-api-exec"
+    task_role_arn:      "arn:aws:iam::111122223333:role/dev-payments-api-task"
+  container_definitions:
+    - name: "app"
+      image: "111122223333.dkr.ecr.ap-southeast-1.amazonaws.com/payments-api:1.4.2"
+      essential: true
+      port_mappings:
+        - { container_port: 8080, protocol: "tcp" }
+      environment:
+        APP_ENV: "dev"
+        LOG_LEVEL: "info"
+        DB_HOST: "dev-payments-api.abc123.ap-southeast-1.rds.amazonaws.com"
+      secrets:
+        # Reference by ARN. Never a value.
+        DB_PASSWORD: "arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:rds!db-abc"
+
+autoscaling:
+  enabled: true
+  min_capacity: 2
+  max_capacity: 8
+  target_cpu_utilization: 65
+  target_memory_utilization: 0          # 0 disables the memory policy
+
+# ==============================================================================
+# 5 — DATA
+# ==============================================================================
+
+rds:
+  enabled: true
+  engine: "postgres"
+  engine_version: "16.3"
+  major_engine_version: "16"
+  family: "postgres16"
+  instance_class: "db.t4g.micro"
+  allocated_storage: 20
+  multi_az: false                       # true in prod
+  username: "payments"                  # password is the AWS-managed secret
+  backup_retention_period: 7
+  deletion_protection: false            # true in prod
+  skip_final_snapshot: true             # false in prod
+  performance_insights_enabled: true
+  monitoring_interval: 60
+  enabled_cloudwatch_logs_exports: ["postgresql"]
+  iam_database_authentication_enabled: true
+
+# ==============================================================================
+# 6 — OBSERVABILITY
+# ==============================================================================
+
+cloudwatch:
+  enabled: true
+  log_groups:
+    app:
+      # ecs_service composes "/ecs/<name_prefix>" itself and does not read this
+      # value (README §8.2). Keep the two in sync by hand until that is fixed.
+      name: "/ecs/dev-payments-api"
+      retention_in_days: 30
+  metric_alarms:
+    ecs_cpu_high:
+      alarm_name: "dev-payments-api-cpu-high"
+      alarm_description: "Service CPU above 80% for 5 minutes"
+      namespace: "AWS/ECS"
+      metric_name: "CPUUtilization"
+      statistic: "Average"
+      comparison_operator: "GreaterThanOrEqualToThreshold"
+      threshold: 80
+      period: 60
+      evaluation_periods: 5
+      treat_missing_data: "notBreaching"
+      dimensions:
+        ClusterName: "dev-payments-api-cluster"
+        ServiceName: "dev-payments-api"
+      # No sns -> cloudwatch wiring exists (README §8.3). After the first apply:
+      #   terraform output sns_topic_arns
+      # then paste the ARN here. Empty means this alarm notifies nobody.
+      alarm_actions: []
+    alb_5xx:
+      alarm_name: "dev-payments-api-alb-5xx"
+      alarm_description: "ALB returning 5xx"
+      namespace: "AWS/ApplicationELB"
+      metric_name: "HTTPCode_ELB_5XX_Count"
+      statistic: "Sum"
+      comparison_operator: "GreaterThanThreshold"
+      threshold: 10
+      period: 60
+      evaluation_periods: 3
+      treat_missing_data: "notBreaching"
+      alarm_actions: []
+
+sns:
+  enabled: true
+  topics:
+    alerts:
+      name: "dev-payments-api-alerts"
+      display_name: "Payments API alerts"
+      subscriptions:
+        oncall_email:
+          protocol: "email"
+          endpoint: "payments-oncall@example.com"
+
+# ==============================================================================
+# 7 — KUBERNETES  (second compute plane, same VPC)
+# ==============================================================================
+# EKS is independent of the ECS flow above. It shares the VPC and private subnets
+# and nothing else. Running both is a deliberate choice, not a migration step —
+# see README §1.
+# ==============================================================================
+
+eks:
+  enabled: true
+  cluster_name: "dev-payments-eks"
+  cluster_version: "1.31"
+
+  # Private by default. A public API server open to 0.0.0.0/0 is the single most
+  # common EKS misconfiguration; if you must open it, list office CIDRs here.
+  endpoint_private_access: true
+  endpoint_public_access: false
+  public_access_cidrs: []
+
+  enabled_log_types: ["api", "audit"]           # all five in prod
+  authentication_mode: "API"                    # access entries, not aws-auth
+  enable_cluster_creator_admin_permissions: true
+  enable_irsa: true                             # OIDC provider for pod IAM roles
+  create_kms_key: true                          # envelope-encrypts Kubernetes secrets
+
+  access_entries:
+    platform_admins:
+      principal_arn: "arn:aws:iam::111122223333:role/platform-admin"
+      policy_associations:
+        admin:
+          policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope:
+            type: "cluster"
+
+  addons:
+    coredns: {}
+    kube-proxy: {}
+    vpc-cni:
+      before_compute: true                      # must exist before nodes join
+    eks-pod-identity-agent: {}
+
+  node_group_defaults:
+    ami_type: "AL2023_x86_64_STANDARD"
+    disk_size: 50
+
+  node_groups:
+    default:
+      min_size: 2
+      max_size: 6
+      desired_size: 2
+      instance_types: ["t3.large"]
+      capacity_type: "SPOT"                     # ON_DEMAND in prod
+      labels:
+        workload: "general"

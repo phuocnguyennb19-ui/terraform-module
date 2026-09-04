@@ -1,4 +1,4 @@
-# Chuẩn hóa: Sử dụng module cho Security Group
+# Standardised: use the security-group module rather than inline rules
 module "alb_sg" {
   source = "git::https://github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v5.1.0"
 
@@ -6,24 +6,36 @@ module "alb_sg" {
   description = "Security group for ALB ${local.alb_config.name}"
   vpc_id      = var.vpc_id
 
-  # Full-Spec Ingress/Egress mapping
-  ingress_rules = [for k, v in local.alb_sg_config.ingress_rules : k]
+  # Each rule is EITHER a predefined rule from the upstream module's catalogue
+  # (a bare key such as https-443-tcp, with no fields) OR a custom rule defined
+  # by its own fields. Previously every key went to `ingress_rules` AND was
+  # expanded into a cidr rule, so a key the catalogue did not know failed with
+  # "Invalid index ... var.rules[...]" while the same rule was also created by
+  # hand. `cidr_ipv4` is what tells the two apart.
+  ingress_rules = [
+    for k, v in local.alb_sg_config.ingress_rules : k if !can(v.cidr_ipv4)
+  ]
   ingress_with_cidr_blocks = [
     for k, v in local.alb_sg_config.ingress_rules : {
-      from_port   = v.from_port
-      to_port     = v.to_port
-      protocol    = v.ip_protocol
+      # from_port/to_port are optional: an "all protocols" rule (ip_protocol -1)
+      # carries neither, and reading them unconditionally crashed the plan on
+      # this module's own default egress rule.
+      from_port   = try(v.from_port, 0)
+      to_port     = try(v.to_port, 0)
+      protocol    = lookup(v, "ip_protocol", "tcp")
       cidr_blocks = v.cidr_ipv4
       description = lookup(v, "description", k)
     } if can(v.cidr_ipv4)
   ]
 
-  egress_rules = [for k, v in local.alb_sg_config.egress_rules : k]
+  egress_rules = [
+    for k, v in local.alb_sg_config.egress_rules : k if !can(v.cidr_ipv4)
+  ]
   egress_with_cidr_blocks = [
     for k, v in local.alb_sg_config.egress_rules : {
-      from_port   = v.from_port
-      to_port     = v.to_port
-      protocol    = v.ip_protocol
+      from_port   = try(v.from_port, 0)
+      to_port     = try(v.to_port, 0)
+      protocol    = lookup(v, "ip_protocol", "tcp")
       cidr_blocks = v.cidr_ipv4
       description = lookup(v, "description", k)
     } if can(v.cidr_ipv4)
@@ -56,7 +68,7 @@ module "alb" {
   access_logs     = local.alb_config.access_logs
   connection_logs = local.alb_config.connection_logs
 
-  # V9 Migration: Chuyển sang dùng Maps
+  # v9 migration: switched to maps
   listeners     = local.listeners
   target_groups = local.target_groups
 

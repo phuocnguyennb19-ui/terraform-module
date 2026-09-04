@@ -40,5 +40,7 @@ output "db_security_group_id" {
 
 output "db_subnet_group_name" {
   description = "Name of the DB subnet group"
-  value       = module.db.db_subnet_group_name
+  # terraform-aws-rds v6.10.0 emits db_subnet_group_id (which is the group's name
+  # in AWS); there is no db_subnet_group_name. Output name kept for consumers.
+  value = try(module.db.db_subnet_group_id, null)
 }

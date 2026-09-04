@@ -17,15 +17,15 @@ locals {
   # 4. ECR Config (Full-Spec)
   raw_ecr_cfg = try(local.config_local.ecr, {})
   ecr_defaults = {
-    repository_names       = lookup(local.raw_ecr_cfg, "repository_names", ["${local.name_prefix}-app"])
-    image_tag_mutability   = lookup(local.raw_ecr_cfg, "image_tag_mutability", local.env == "prod" ? "IMMUTABLE" : "MUTABLE")
-    scan_on_push           = lookup(local.raw_ecr_cfg, "scan_on_push", true)
+    repository_names        = lookup(local.raw_ecr_cfg, "repository_names", ["${local.name_prefix}-app"])
+    image_tag_mutability    = lookup(local.raw_ecr_cfg, "image_tag_mutability", local.env == "prod" ? "IMMUTABLE" : "MUTABLE")
+    scan_on_push            = lookup(local.raw_ecr_cfg, "scan_on_push", true)
     repository_force_delete = lookup(local.raw_ecr_cfg, "repository_force_delete", false)
-    encryption_type        = lookup(local.raw_ecr_cfg, "encryption_type", "AES256")
-    kms_key                = lookup(local.raw_ecr_cfg, "kms_key", null)
-    read_access_arns       = lookup(local.raw_ecr_cfg, "read_access_arns", [])
-    read_write_access_arns = lookup(local.raw_ecr_cfg, "read_write_access_arns", [])
-    lifecycle_policy       = lookup(local.raw_ecr_cfg, "lifecycle_policy", null)
+    encryption_type         = lookup(local.raw_ecr_cfg, "encryption_type", "AES256")
+    kms_key                 = lookup(local.raw_ecr_cfg, "kms_key", null)
+    read_access_arns        = lookup(local.raw_ecr_cfg, "read_access_arns", [])
+    read_write_access_arns  = lookup(local.raw_ecr_cfg, "read_write_access_arns", [])
+    lifecycle_policy        = lookup(local.raw_ecr_cfg, "lifecycle_policy", null)
   }
   ecr_config = merge(local.ecr_defaults, try(local.config_local.ecr, {}))
 

@@ -17,14 +17,14 @@ locals {
   # 4. Smart Defaults for waf
   raw_waf_cfg = try(local.config_local.waf, {})
   waf_defaults = {
-    name           = "${local.name_prefix}-waf"
-    description    = lookup(local.raw_waf_cfg, "description", "WAF managed by Terraform for ${local.name_prefix}")
-    scope          = lookup(local.raw_waf_cfg, "scope", "REGIONAL")
-    default_action = lookup(local.raw_waf_cfg, "default_action", "allow")
-    rules          = lookup(local.raw_waf_cfg, "rules", [])
-    associate_alb_arns     = lookup(local.raw_waf_cfg, "associate_alb_arns", [])
-    logging_configuration  = lookup(local.raw_waf_cfg, "logging_configuration", {})
-    token_domains          = lookup(local.raw_waf_cfg, "token_domains", [])
+    name                  = "${local.name_prefix}-waf"
+    description           = lookup(local.raw_waf_cfg, "description", "WAF managed by Terraform for ${local.name_prefix}")
+    scope                 = lookup(local.raw_waf_cfg, "scope", "REGIONAL")
+    default_action        = lookup(local.raw_waf_cfg, "default_action", "allow")
+    rules                 = lookup(local.raw_waf_cfg, "rules", [])
+    associate_alb_arns    = lookup(local.raw_waf_cfg, "associate_alb_arns", [])
+    logging_configuration = lookup(local.raw_waf_cfg, "logging_configuration", {})
+    token_domains         = lookup(local.raw_waf_cfg, "token_domains", [])
   }
   waf_config = merge(local.waf_defaults, try(local.config_local.waf, {}))
 

@@ -17,11 +17,11 @@ locals {
   # 4. Smart Defaults for acm
   raw_acm_cfg = try(local.config_local.acm, {})
   acm_defaults = {
-    domain_name               = lookup(local.raw_acm_cfg, "domain_name", null)
-    subject_alternative_names = lookup(local.raw_acm_cfg, "subject_alternative_names", [])
-    validation_method         = lookup(local.raw_acm_cfg, "validation_method", "DNS")
-    wait_for_validation       = lookup(local.raw_acm_cfg, "wait_for_validation", true)
-    key_algorithm             = lookup(local.raw_acm_cfg, "key_algorithm", "RSA_2048")
+    domain_name                                 = lookup(local.raw_acm_cfg, "domain_name", null)
+    subject_alternative_names                   = lookup(local.raw_acm_cfg, "subject_alternative_names", [])
+    validation_method                           = lookup(local.raw_acm_cfg, "validation_method", "DNS")
+    wait_for_validation                         = lookup(local.raw_acm_cfg, "wait_for_validation", true)
+    key_algorithm                               = lookup(local.raw_acm_cfg, "key_algorithm", "RSA_2048")
     certificate_transparency_logging_preference = lookup(local.raw_acm_cfg, "certificate_transparency_logging_preference", "ENABLED")
   }
   acm_config = merge(local.acm_defaults, try(local.config_local.acm, {}))

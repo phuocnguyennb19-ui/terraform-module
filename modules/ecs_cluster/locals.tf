@@ -21,16 +21,16 @@ locals {
   )
 
   ecs_defaults = {
-    cluster_name        = "${local.name_prefix}-cluster"
-    container_insights  = lookup(local.raw_ecs_config, "container_insights", true)
-    kms_key_id          = lookup(local.raw_ecs_config, "kms_key_id", null)
-    fargate_weight      = lookup(local.raw_ecs_config, "fargate_weight", 100)
-    fargate_base        = lookup(local.raw_ecs_config, "fargate_base", 0)
-    fargate_spot_weight = lookup(local.raw_ecs_config, "fargate_spot_weight", 0)
-    create_task_exec_iam_role       = lookup(local.raw_ecs_config, "create_task_exec_iam_role", true)
-    create_task_exec_policy         = lookup(local.raw_ecs_config, "create_task_exec_policy", true)
-    task_exec_ssm_param_arns        = lookup(local.raw_ecs_config, "task_exec_ssm_param_arns", ["arn:aws:ssm:*:*:parameter/*"])
-    task_exec_secret_arns           = lookup(local.raw_ecs_config, "task_exec_secret_arns", ["arn:aws:secretsmanager:*:*:secret:*"])
+    cluster_name              = "${local.name_prefix}-cluster"
+    container_insights        = lookup(local.raw_ecs_config, "container_insights", true)
+    kms_key_id                = lookup(local.raw_ecs_config, "kms_key_id", null)
+    fargate_weight            = lookup(local.raw_ecs_config, "fargate_weight", 100)
+    fargate_base              = lookup(local.raw_ecs_config, "fargate_base", 0)
+    fargate_spot_weight       = lookup(local.raw_ecs_config, "fargate_spot_weight", 0)
+    create_task_exec_iam_role = lookup(local.raw_ecs_config, "create_task_exec_iam_role", true)
+    create_task_exec_policy   = lookup(local.raw_ecs_config, "create_task_exec_policy", true)
+    task_exec_ssm_param_arns  = lookup(local.raw_ecs_config, "task_exec_ssm_param_arns", ["arn:aws:ssm:*:*:parameter/*"])
+    task_exec_secret_arns     = lookup(local.raw_ecs_config, "task_exec_secret_arns", ["arn:aws:secretsmanager:*:*:secret:*"])
   }
   ecs_config = merge(local.ecs_defaults, local.raw_ecs_config)
 

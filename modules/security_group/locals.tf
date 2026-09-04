@@ -17,17 +17,17 @@ locals {
   # 4. Security Group Configuration
   raw_sg_cfg = try(local.config_local.security_group, {})
   sg_defaults = {
-    name                     = "${local.name_prefix}-sg"
-    description              = try(local.raw_sg_cfg.description, "Security group managed by Terraform")
-    vpc_id                   = var.vpc_id
-    ingress_rules            = try(local.raw_sg_cfg.ingress_rules, [])
-    ingress_cidr_blocks      = try(local.raw_sg_cfg.ingress_cidr_blocks, [])
-    ingress_with_cidr_blocks = try(local.raw_sg_cfg.ingress_with_cidr_blocks, [])
-    egress_rules             = try(local.raw_sg_cfg.egress_rules, ["all-all"])
-    egress_cidr_blocks       = try(local.raw_sg_cfg.egress_cidr_blocks, ["0.0.0.0/0"])
+    name                                  = "${local.name_prefix}-sg"
+    description                           = try(local.raw_sg_cfg.description, "Security group managed by Terraform")
+    vpc_id                                = var.vpc_id
+    ingress_rules                         = try(local.raw_sg_cfg.ingress_rules, [])
+    ingress_cidr_blocks                   = try(local.raw_sg_cfg.ingress_cidr_blocks, [])
+    ingress_with_cidr_blocks              = try(local.raw_sg_cfg.ingress_with_cidr_blocks, [])
+    egress_rules                          = try(local.raw_sg_cfg.egress_rules, ["all-all"])
+    egress_cidr_blocks                    = try(local.raw_sg_cfg.egress_cidr_blocks, ["0.0.0.0/0"])
     ingress_with_source_security_group_id = try(local.raw_sg_cfg.ingress_with_source_security_group_id, [])
     egress_with_source_security_group_id  = try(local.raw_sg_cfg.egress_with_source_security_group_id, [])
-    revoke_rules_on_delete   = try(local.raw_sg_cfg.revoke_rules_on_delete, false)
+    revoke_rules_on_delete                = try(local.raw_sg_cfg.revoke_rules_on_delete, false)
   }
   sg_config = merge(local.sg_defaults, try(local.config_local.security_group, {}))
 

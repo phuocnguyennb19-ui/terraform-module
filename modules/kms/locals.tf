@@ -17,16 +17,16 @@ locals {
   # 4. Smart Defaults for kms
   raw_kms_cfg = try(local.config_local.kms, {})
   kms_defaults = {
-    aliases                   = lookup(local.raw_kms_cfg, "aliases", ["alias/${local.name_prefix}-key"])
-    description               = lookup(local.raw_kms_cfg, "description", "Master key for ${local.name_prefix}")
-    deletion_window_in_days   = lookup(local.raw_kms_cfg, "deletion_window_in_days", 30)
-    key_users                 = lookup(local.raw_kms_cfg, "key_users", [])
-    key_administrators        = lookup(local.raw_kms_cfg, "key_administrators", [])
-    key_usage                 = lookup(local.raw_kms_cfg, "key_usage", "ENCRYPT_DECRYPT")
-    customer_master_key_spec  = lookup(local.raw_kms_cfg, "customer_master_key_spec", "SYMMETRIC_DEFAULT")
-    multi_region              = lookup(local.raw_kms_cfg, "multi_region", false)
-    rotation_period_in_days   = lookup(local.raw_kms_cfg, "rotation_period_in_days", 365)
-    policy                    = lookup(local.raw_kms_cfg, "policy", null)
+    aliases                  = lookup(local.raw_kms_cfg, "aliases", ["alias/${local.name_prefix}-key"])
+    description              = lookup(local.raw_kms_cfg, "description", "Master key for ${local.name_prefix}")
+    deletion_window_in_days  = lookup(local.raw_kms_cfg, "deletion_window_in_days", 30)
+    key_users                = lookup(local.raw_kms_cfg, "key_users", [])
+    key_administrators       = lookup(local.raw_kms_cfg, "key_administrators", [])
+    key_usage                = lookup(local.raw_kms_cfg, "key_usage", "ENCRYPT_DECRYPT")
+    customer_master_key_spec = lookup(local.raw_kms_cfg, "customer_master_key_spec", "SYMMETRIC_DEFAULT")
+    multi_region             = lookup(local.raw_kms_cfg, "multi_region", false)
+    rotation_period_in_days  = lookup(local.raw_kms_cfg, "rotation_period_in_days", 365)
+    policy                   = lookup(local.raw_kms_cfg, "policy", null)
   }
   kms_config = merge(local.kms_defaults, try(local.config_local.kms, {}))
 

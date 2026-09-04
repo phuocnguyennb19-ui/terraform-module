@@ -77,7 +77,7 @@ module "ecs_service" {
   subnet_ids         = local.service_cfg.subnet_ids != null ? local.service_cfg.subnet_ids : var.private_subnets
   security_group_ids = local.service_cfg.security_group_ids != null ? local.service_cfg.security_group_ids : null
 
-  # Tự động tạo SG rules nếu không truyền security_group_ids
+  # Create security-group rules automatically when security_group_ids is not supplied
   create_security_group = local.service_cfg.security_group_ids == null
   security_group_rules  = local.ecs_sg_rules
 
@@ -102,7 +102,7 @@ module "ecs_service" {
 
   propagate_tags = local.service_cfg.propagate_tags
 
-  # AutoScaling tích hợp (Integrated)
+  # Integrated autoscaling
   enable_autoscaling       = local.autoscaling_cfg.enabled
   autoscaling_min_capacity = local.autoscaling_cfg.min_capacity
   autoscaling_max_capacity = local.autoscaling_cfg.max_capacity

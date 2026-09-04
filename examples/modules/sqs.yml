@@ -1,0 +1,33 @@
+# ==============================================================================
+# sqs — config reference
+# ==============================================================================
+# Read by modules/sqs/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+sqs:
+  enabled: false
+  queues:
+    jobs:
+      name: "dev-infra-jobs"
+      fifo_queue: false
+      content_based_deduplication: false
+      visibility_timeout_seconds: 30
+      message_retention_seconds: 345600          # 4 days
+      max_message_size: 262144
+      delay_seconds: 0
+      receive_wait_time_seconds: 20              # long polling
+      kms_master_key_id: null
+      kms_data_key_reuse_period_seconds: 300
+      redrive_policy: |
+        { "deadLetterTargetArn": "arn:aws:sqs:ap-southeast-1:111122223333:dev-infra-jobs-dlq",
+          "maxReceiveCount": 5 }
+      redrive_allow_policy: null
+      queue_policy_statements: {}
+      policy: null

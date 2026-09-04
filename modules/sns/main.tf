@@ -4,17 +4,16 @@ module "sns" {
 
   name = lookup(each.value, "name", "${local.name_prefix}-${each.key}")
 
-  display_name                    = lookup(each.value, "display_name", null)
-  fifo_topic                      = lookup(each.value, "fifo_topic", false)
-  content_based_deduplication     = lookup(each.value, "content_based_deduplication", false)
-  kms_master_key_id               = lookup(each.value, "kms_master_key_id", null)
-  delivery_policy                 = lookup(each.value, "delivery_policy", null)
-  lambda_success_feedback_role_arn   = lookup(each.value, "lambda_success_feedback_role_arn", null)
-  lambda_failure_feedback_role_arn   = lookup(each.value, "lambda_failure_feedback_role_arn", null)
-  lambda_success_feedback_sample_rate = lookup(each.value, "lambda_success_feedback_sample_rate", null)
-  sqs_success_feedback_role_arn    = lookup(each.value, "sqs_success_feedback_role_arn", null)
-  sqs_failure_feedback_role_arn    = lookup(each.value, "sqs_failure_feedback_role_arn", null)
-  sqs_success_feedback_sample_rate = lookup(each.value, "sqs_success_feedback_sample_rate", null)
+  display_name                = lookup(each.value, "display_name", null)
+  fifo_topic                  = lookup(each.value, "fifo_topic", false)
+  content_based_deduplication = lookup(each.value, "content_based_deduplication", false)
+  kms_master_key_id           = lookup(each.value, "kms_master_key_id", null)
+  delivery_policy             = lookup(each.value, "delivery_policy", null)
+  # terraform-aws-sns v6.1.1 takes delivery-status feedback as objects, not as six
+  # flat arguments: application_feedback / firehose_feedback / http_feedback /
+  # lambda_feedback / sqs_feedback. Re-wire through those when feedback is needed.
+  lambda_feedback = lookup(each.value, "lambda_feedback", {})
+  sqs_feedback    = lookup(each.value, "sqs_feedback", {})
 
   subscriptions = lookup(each.value, "subscriptions", {})
 

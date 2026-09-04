@@ -1,0 +1,33 @@
+# ==============================================================================
+# waf — config reference
+# ==============================================================================
+# Read by modules/waf/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+waf:
+  enabled: false
+  scope: "REGIONAL"                              # REGIONAL for ALB, CLOUDFRONT for CDN
+  description: "Edge protection for dev-infra"
+  default_action: "allow"                        # allow | block
+  token_domains: ["dev.platform.example.com"]
+  associate_alb_arns:
+    - "arn:aws:elasticloadbalancing:ap-southeast-1:111122223333:loadbalancer/app/dev-alb/abc"
+  rules:
+    - name: "AWSManagedRulesCommonRuleSet"
+      priority: 1
+      override_action: "none"
+      statement:
+        managed_rule_group_statement:
+          name:        "AWSManagedRulesCommonRuleSet"
+          vendor_name: "AWS"
+      visibility_config:
+        cloudwatch_metrics_enabled: true
+        metric_name: "common-rule-set"
+        sampled_requests_enabled: true

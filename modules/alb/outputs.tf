@@ -13,11 +13,11 @@ output "lb_arn" { value = module.alb.arn }
 output "lb_dns_name" { value = module.alb.dns_name }
 output "lb_zone_id" { value = module.alb.zone_id }
 
-# V9 Migration: Listeners & Target Groups hiện là Maps
+# v9 migration: listeners and target groups are maps now
 output "listeners" { value = module.alb.listeners }
 output "target_groups" { value = module.alb.target_groups }
 
-# Backward Compatibility cho Engine cũ (nếu cần)
+# Backward compatibility for the older engine key (if needed)
 output "http_tcp_listener_arns" {
   value = [for k, v in module.alb.listeners : v.arn]
 }

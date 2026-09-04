@@ -1,0 +1,53 @@
+# ==============================================================================
+# alb — config reference
+# ==============================================================================
+# Read by modules/alb/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Needs `vpc_id`, `vpc_cidr_block`, `public_subnets`, `private_subnets` from the root.
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+alb:
+  enabled: false
+  internal: false                                # true puts it on the private subnets
+  idle_timeout: 60
+  enable_deletion_protection: true               # prod
+  enable_waf_fail_open: false
+  drop_invalid_header_fields: true
+  preserve_host_header: false
+  desync_mitigation_mode: "defensive"
+  xff_header_processing_mode: "append"
+  security_group_ingress_rules:                  # the module creates the ALB's own SG
+    https:
+      from_port:   443
+      to_port:     443
+      ip_protocol: "tcp"
+      description: "HTTPS from the internet"
+      cidr_ipv4:   "0.0.0.0/0"
+  listeners:                                     # MAP (upstream v9)
+    https:
+      port:            443
+      protocol:        "HTTPS"
+      certificate_arn: "arn:aws:acm:ap-southeast-1:111122223333:certificate/abc-123"
+      forward:
+        target_group_key: "app"
+  target_groups:                                 # MAP (upstream v9)
+    app:
+      protocol:    "HTTP"
+      port:        8080
+      target_type: "ip"                          # ip is required for Fargate
+      health_check:
+        enabled: true
+        path:    "/healthz"
+        matcher: "200"
+  access_logs:
+    bucket:  "sm-platform-dev-logs"
+    prefix:  "alb"
+    enabled: true
+  connection_logs: {}

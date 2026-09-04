@@ -1,12 +1,14 @@
 # Terraform
 .terraform/
+# NOTE: .terraform.lock.hcl is deliberately NOT ignored — it pins provider
+# versions and checksums so CI resolves exactly what you resolved. Commit it.
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 *.tfvars
 *.tfvars.json
 tfplan
 tfplan.json
+tfplan-*
 
 # Logs
 *.log

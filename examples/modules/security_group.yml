@@ -1,0 +1,36 @@
+# ==============================================================================
+# security_group — config reference
+# ==============================================================================
+# Read by modules/security_group/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Needs `vpc_id` from the root.
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+security_group:
+  enabled: false
+  description: "Shared application security group"
+  ingress_rules: ["https-443-tcp"]               # named rules from the upstream module
+  ingress_cidr_blocks: ["10.10.0.0/16"]
+  ingress_with_cidr_blocks:
+    - from_port: 8080
+      to_port: 8080
+      protocol: "tcp"
+      description: "App port from inside the VPC"
+      cidr_blocks: "10.10.0.0/16"
+  ingress_with_source_security_group_id:
+    - from_port: 5432
+      to_port: 5432
+      protocol: "tcp"
+      description: "Postgres from the app SG"
+      source_security_group_id: "sg-0123456789abcdef0"
+  egress_rules: ["all-all"]                      # prod: ["https-443-tcp"]
+  egress_cidr_blocks: ["0.0.0.0/0"]
+  egress_with_source_security_group_id: []
+  revoke_rules_on_delete: false

@@ -16,17 +16,17 @@ locals {
   # 4. ALB Configuration (Full-Spec for v9.x)
   raw_alb_cfg = try(local.config_local.alb, {})
   alb_defaults = {
-    name                        = "${local.name_prefix}-alb"
-    internal                    = lookup(local.raw_alb_cfg, "internal", false)
-    idle_timeout                = lookup(local.raw_alb_cfg, "idle_timeout", 60)
-    enable_deletion_protection  = lookup(local.raw_alb_cfg, "enable_deletion_protection", local.env == "prod")
-    drop_invalid_header_fields  = lookup(local.raw_alb_cfg, "drop_invalid_header_fields", true)
-    preserve_host_header        = lookup(local.raw_alb_cfg, "preserve_host_header", false)
-    xff_header_processing_mode  = lookup(local.raw_alb_cfg, "xff_header_processing_mode", "append")
-    desync_mitigation_mode      = lookup(local.raw_alb_cfg, "desync_mitigation_mode", "defensive")
-    enable_waf_fail_open        = lookup(local.raw_alb_cfg, "enable_waf_fail_open", false)
-    access_logs = lookup(local.raw_alb_cfg, "access_logs", {})
-    connection_logs = lookup(local.raw_alb_cfg, "connection_logs", {})
+    name                       = "${local.name_prefix}-alb"
+    internal                   = lookup(local.raw_alb_cfg, "internal", false)
+    idle_timeout               = lookup(local.raw_alb_cfg, "idle_timeout", 60)
+    enable_deletion_protection = lookup(local.raw_alb_cfg, "enable_deletion_protection", local.env == "prod")
+    drop_invalid_header_fields = lookup(local.raw_alb_cfg, "drop_invalid_header_fields", true)
+    preserve_host_header       = lookup(local.raw_alb_cfg, "preserve_host_header", false)
+    xff_header_processing_mode = lookup(local.raw_alb_cfg, "xff_header_processing_mode", "append")
+    desync_mitigation_mode     = lookup(local.raw_alb_cfg, "desync_mitigation_mode", "defensive")
+    enable_waf_fail_open       = lookup(local.raw_alb_cfg, "enable_waf_fail_open", false)
+    access_logs                = lookup(local.raw_alb_cfg, "access_logs", {})
+    connection_logs            = lookup(local.raw_alb_cfg, "connection_logs", {})
   }
   alb_config = merge(local.alb_defaults, try(local.config_local.alb, {}))
 
@@ -37,7 +37,7 @@ locals {
   }
 
   # 4.2. Listeners & Target Groups Mapping (Standardized for v9.x)
-  # Nếu không khai báo trong YAML, tự tạo bộ Listener 80 mặc định (Backward Compatibility)
+  # When not declared in YAML, create the default port-80 listener (backward compatibility)
   listeners = lookup(local.alb_config, "listeners", {
     http80 = {
       port     = 80
@@ -54,6 +54,11 @@ locals {
       protocol    = "HTTP"
       port        = lookup(local.alb_config, "backend_port", 80)
       target_type = "ip"
+      # Upstream ALB v9 creates an aws_lb_target_group_attachment for every
+      # target group unless this is false, and an attachment needs a target_id
+      # that this default cannot know. Targets are registered by whatever runs
+      # behind the load balancer — an ECS service, or a TargetGroupBinding.
+      create_attachment = false
       health_check = {
         enabled             = true
         path                = lookup(local.alb_config, "health_check_path", "/")

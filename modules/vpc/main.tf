@@ -6,10 +6,10 @@ module "vpc" {
   cidr = local.vpc_config.cidr
   azs  = local.vpc_config.azs
 
-  private_subnets   = local.vpc_config.private_subnets
-  public_subnets    = local.vpc_config.public_subnets
-  database_subnets  = local.vpc_config.database_subnets
-  intra_subnets     = local.vpc_config.intra_subnets
+  private_subnets  = local.vpc_config.private_subnets
+  public_subnets   = local.vpc_config.public_subnets
+  database_subnets = local.vpc_config.database_subnets
+  intra_subnets    = local.vpc_config.intra_subnets
 
   enable_nat_gateway     = local.vpc_config.enable_nat_gateway
   single_nat_gateway     = local.vpc_config.single_nat_gateway

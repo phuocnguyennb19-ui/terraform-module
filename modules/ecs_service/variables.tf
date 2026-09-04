@@ -39,7 +39,7 @@ variable "global_config" {
 
   validation {
     condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
-    error_message = "Biến environment phải là một trong các giá trị: dev, test, staging, preprod, prod."
+    error_message = "environment must be one of: dev, test, staging, preprod, prod."
   }
 }
 

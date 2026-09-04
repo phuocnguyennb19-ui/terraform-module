@@ -1,0 +1,41 @@
+# ==============================================================================
+# iam — config reference
+# ==============================================================================
+# Read by modules/iam/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/modules"
+# or paste this block into a monolithic config.yml.
+# ==============================================================================
+
+iam:
+  enabled: false
+  # Map keys become the resource names.
+  policies:
+    dev-infra-s3-read:
+      path: "/"
+      description: "Read-only access to the artifacts bucket"
+      policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Action": ["s3:GetObject", "s3:ListBucket"],
+            "Resource": ["arn:aws:s3:::sm-platform-dev-artifacts",
+                         "arn:aws:s3:::sm-platform-dev-artifacts/*"]
+          }]
+        }
+  roles:
+    dev-infra-ecs-task:
+      trusted_role_services: ["ecs-tasks.amazonaws.com"]
+      custom_role_policy_arns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      custom_policy_names: ["dev-infra-s3-read"]   # resolved to ARNs by the module
+      role_requires_mfa: false
+      create_instance_profile: false               # true only for EC2 roles
+      # assume_role_policy: |                      # raw JSON replaces the trust policy
+  groups: {}
+  users: {}
