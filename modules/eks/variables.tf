@@ -1,4 +1,5 @@
 variable "global_config" {
+  description = "Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod."
   type = object({
     environment = string
     region      = string
@@ -15,25 +16,29 @@ variable "global_config" {
 }
 
 variable "config_file" {
-  type    = string
-  default = "config.yml"
+  description = "Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory."
+  type        = string
+  default     = "config.yml"
 }
 
 variable "manual_config" {
-  type    = any
-  default = {}
+  description = "Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly."
+  type        = any
+  default     = {}
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Extra tags, merged over the ones derived from `global_config`."
+  type        = map(string)
+  default     = {}
 }
 
 # ---- wiring inputs, supplied by the caller -----------------------------------
 
 variable "vpc_id" {
-  type    = string
-  default = null
+  description = "VPC the cluster and its node groups are placed in."
+  type        = string
+  default     = null
 }
 
 variable "private_subnets" {
