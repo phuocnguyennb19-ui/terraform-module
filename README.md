@@ -51,7 +51,7 @@ terraform plan -var="config_file=environments/dev/config.yml" \
 - [`examples/core-service`](examples/core-service) — runnable. One HTTPS API end to end:
   Route53 → ALB → ECS Service → RDS, with ECR, KMS, IAM, WAF, CloudWatch, SNS and EKS.
   `terraform init && terraform plan` from that directory.
-- [`examples/modules`](examples/modules) — one config file per module plus `common.yml`;
+- [`examples/module-config`](examples/module-config) — one config file per module plus `common.yml`;
   usable directly as a `config_dir`.
 
 Each module also has its own README with Requirements, Providers, Modules, Resources, Inputs
@@ -205,7 +205,7 @@ No module has an internal `enabled` flag. The root reads `<block>.enabled` and t
 | Mode | Flag | Shape |
 |---|---|---|
 | Single file | `-var="config_file=environments/dev/config.yml"` | every block in one file |
-| Per module | `-var="config_dir=examples/modules"` | `common.yml` + optional `<module>.yml` |
+| Per module | `-var="config_dir=examples/module-config"` | `common.yml` + optional `<module>.yml` |
 
 Precedence, lowest to highest:
 
@@ -253,7 +253,7 @@ Lists are replaced wholesale, not concatenated.
 | `ecs_service` | `service` + `autoscaling` | `ecs_service` |
 | `eks` | `eks` | |
 
-Keys per block are in `examples/modules/<module>.yml`; every one of them appears in that
+Keys per block are in `examples/module-config/<module>.yml`; every one of them appears in that
 module's `locals.tf`. Omitted keys fall back to the module default.
 
 ### Adding a key
@@ -336,17 +336,23 @@ two commented lines — enable one:
    all three environments, so those alarms notify nobody. `dns` was fixed for this and resolves
    `alias.target: "alb"` from the ALB outputs.
 
-4. `security_group` floats on `~> 5.0`, the only upstream not pinned exactly.
+4. `ecs_service` resolves its nested blocks inconsistently. `task_definition` uses
+   `merge(nested, root)` so a **root-level** `task_definition:` overrides the one under
+   `service:`, while `container_definitions` and `volumes` prefer the **nested** copy. The code
+   comment claimed the opposite and has been corrected; the behaviour was left alone because
+   changing it would silently relocate config. See `modules/ecs_service/README.md`.
 
-5. No production invariant is enforced. `vpc.one_nat_gateway_per_az` and `s3.force_destroy` in
+5. `security_group` floats on `~> 5.0`, the only upstream not pinned exactly.
+
+6. No production invariant is enforced. `vpc.one_nat_gateway_per_az` and `s3.force_destroy` in
    prod live only in `config.yml`. `terraform test` is unusable on 1.5.7; `check` blocks run and
    would assert them on every plan.
 
-6. `kms.rotation_period_in_days`, `waf.logging_configuration` and `s3.notification_configurations`
+7. `kms.rotation_period_in_days`, `waf.logging_configuration` and `s3.notification_configurations`
    remain as locals but were removed from `main.tf` — the pinned upstream rejects them. Setting
    them in YAML has no effect.
 
-7. LocalStack Community answers 501 for `ecr`, `ecs`, `elbv2`, `eks` and `rds`, so a config
+8. LocalStack Community answers 501 for `ecr`, `ecs`, `elbv2`, `eks` and `rds`, so a config
    enabling those cannot be applied against it. A service missing from the `endpoints` block in
    `providers.tf` silently goes to real AWS — add new services there in the same change.
 
@@ -365,8 +371,8 @@ two commented lines — enable one:
 
 ## License
 
-None. A `LICENSE` file is required by the HashiCorp Standard Module Structure and is a
-publishing decision, not one to be made from inside the repository.
+Apache-2.0 — see [`LICENSE`](LICENSE). Chosen to match every pinned `terraform-aws-modules`
+release this repository wraps, so there is no compatibility question with the upstream code.
 
 ## Blast radius
 

@@ -25,6 +25,12 @@ locals {
     ignore_secret_changes   = lookup(local.raw_sm_cfg, "ignore_secret_changes", false)
     rotation_lambda_arn     = lookup(local.raw_sm_cfg, "rotation_lambda_arn", null)
     rotation_rules          = lookup(local.raw_sm_cfg, "rotation_rules", null)
+
+    # Exactly one of these has to produce an initial value; see main.tf.
+    secret_string          = lookup(local.raw_sm_cfg, "secret_string", null)
+    create_random_password = lookup(local.raw_sm_cfg, "create_random_password", false)
+    random_password_length = lookup(local.raw_sm_cfg, "random_password_length", 32)
+    enable_rotation        = lookup(local.raw_sm_cfg, "enable_rotation", false)
   }
 
   # Factory: each entry in secrets_manager.secrets becomes one secret resource.
@@ -48,4 +54,18 @@ locals {
     },
     var.tags, try(var.global_config.tags, {})
   )
+}
+
+# Fail here, with the name of the offending secret, rather than at apply time
+# with an AWS error that does not say which one it means.
+check "every_secret_has_an_initial_value" {
+  assert {
+    condition = alltrue([
+      for k, v in local.secrets : v.secret_string != null || v.create_random_password
+    ])
+    error_message = format(
+      "secrets_manager: %v set neither secret_string nor create_random_password. Upstream always creates a version, so one of them is required.",
+      [for k, v in local.secrets : k if v.secret_string == null && !v.create_random_password],
+    )
+  }
 }

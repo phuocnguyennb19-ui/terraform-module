@@ -1,6 +1,4 @@
-# ==========================================
 # VPC OUTPUTS
-# ==========================================
 
 output "vpc_id" {
   description = "The ID of the VPC"
@@ -12,9 +10,7 @@ output "vpc_cidr_block" {
   value       = module.vpc.vpc_cidr_block
 }
 
-# ==========================================
 # SUBNETS OUTPUTS
-# ==========================================
 
 output "private_subnets" {
   description = "List of IDs of private subnets"
@@ -36,9 +32,7 @@ output "public_subnet_arns" {
   value       = module.vpc.public_subnet_arns
 }
 
-# ==========================================
 # NAT GATEWAY & ROUTING
-# ==========================================
 
 output "nat_public_ips" {
   description = "List of public Elastic IPs created for AWS NAT Gateway(s). Useful for whitelisting IPs in external firewalls."
@@ -55,18 +49,14 @@ output "public_route_table_ids" {
   value       = module.vpc.public_route_table_ids
 }
 
-# ==========================================
 # SECURITY
-# ==========================================
 
 output "default_security_group_id" {
   description = "The ID of the security group created by default on VPC creation"
   value       = module.vpc.default_security_group_id
 }
 
-# ==========================================
 # DATABASE SUBNETS
-# ==========================================
 
 output "database_subnets" {
   description = "List of IDs of database subnets"
@@ -78,18 +68,14 @@ output "database_subnet_group_name" {
   value       = try(module.vpc.database_subnet_group_name, null)
 }
 
-# ==========================================
 # INTRA SUBNETS
-# ==========================================
 
 output "intra_subnets" {
   description = "List of IDs of intra subnets (no internet access)"
   value       = module.vpc.intra_subnets
 }
 
-# ==========================================
 # FLOW LOGS
-# ==========================================
 
 output "vpc_flow_log_id" {
   description = "ID of the VPC Flow Log (null when flow log disabled)"
@@ -101,9 +87,7 @@ output "vpc_flow_log_cloudwatch_iam_role_arn" {
   value       = try(module.vpc.vpc_flow_log_cloudwatch_iam_role_arn, null)
 }
 
-# ==========================================
 # AZS
-# ==========================================
 
 output "azs" {
   description = "List of Availability Zones used"

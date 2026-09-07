@@ -1,12 +1,9 @@
-# ==============================================================================
 # STAGING ENVIRONMENT — production rehearsal
-# ==============================================================================
 # Same keys as prod, smaller numbers. If a key exists in prod/config.yml and not
 # here, staging has stopped rehearsing production. Keep the two files structurally
 # identical and let only the values differ.
 #
 #   make plan ENV=staging
-# ==============================================================================
 
 global:
   environment: "staging"

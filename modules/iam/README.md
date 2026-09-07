@@ -51,7 +51,8 @@ iam:
       role_requires_mfa: false
       create_instance_profile: false               # true only for EC2 roles
       # assume_role_policy: |                      # raw JSON replaces the trust policy
-  # … full list in examples/modules/iam.yml
+  groups: {}
+  users: {}
 ```
 
 ## Requirements

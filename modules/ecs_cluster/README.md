@@ -38,6 +38,9 @@ ecs:                                             # legacy key: ecs_cluster
   create_task_exec_policy: true
   task_exec_secret_arns:    ["arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:*"]
   task_exec_ssm_param_arns: []
+
+# 18 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/ecs_cluster.yml
 ```
 
 ## Requirements

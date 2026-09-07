@@ -33,7 +33,7 @@ variable "tags" {
   default     = {}
 }
 
-# ---- wiring inputs, supplied by the caller -----------------------------------
+# wiring inputs, supplied by the caller
 
 variable "vpc_id" {
   description = "VPC the cluster and its node groups are placed in."

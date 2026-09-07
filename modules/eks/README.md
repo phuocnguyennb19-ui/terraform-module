@@ -55,7 +55,38 @@ eks:
   subnet_ids: []                               # empty = the private_subnets wired in
 
   access_entries:
-  # … full list in examples/modules/eks.yml
+    platform_admins:
+      principal_arn: "arn:aws:iam::111122223333:role/platform-admin"
+      policy_associations:
+        admin:
+          policy_arn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope: { type: "cluster" }
+
+  addons:
+    coredns: {}
+    kube-proxy: {}
+    vpc-cni: { before_compute: true }          # must exist before nodes join
+    eks-pod-identity-agent: {}
+
+  node_group_defaults:
+    ami_type: "AL2023_x86_64_STANDARD"
+    disk_size: 50
+
+  node_groups:
+    default:
+      min_size: 2
+      max_size: 6
+      desired_size: 2
+      instance_types: ["t3.large"]
+      capacity_type: "SPOT"                    # ON_DEMAND in prod
+      labels: { workload: "general" }
+
+  fargate_profiles: {}
+  security_group_additional_rules: {}
+  node_security_group_additional_rules: {}
+
+# 79 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/eks.yml
 ```
 
 ## Requirements

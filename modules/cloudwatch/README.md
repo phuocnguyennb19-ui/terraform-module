@@ -51,7 +51,12 @@ cloudwatch:
       # `terraform output sns_topic_arns`. Empty means the alarm notifies nobody.
       alarm_actions: ["arn:aws:sns:ap-southeast-1:111122223333:dev-infra-alerts"]
       ok_actions: []
-  # … full list in examples/modules/cloudwatch.yml
+      insufficient_data_actions: []
+  dashboards:
+    overview:
+      name: "dev-infra-overview"
+      body: |
+        { "widgets": [] }
 ```
 
 ## Requirements

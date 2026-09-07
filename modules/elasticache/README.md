@@ -47,6 +47,9 @@ elasticache:
   auto_minor_version_upgrade: true
   kms_key_arn: null
   security_group_ids: []                         # empty = the module creates one
+
+# 41 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/elasticache.yml
 ```
 
 ## Requirements

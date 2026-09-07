@@ -1,15 +1,12 @@
-# ==============================================================================
 # cloudwatch — config reference
-# ==============================================================================
 # Read by modules/cloudwatch/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 cloudwatch:
   enabled: false
@@ -33,7 +30,7 @@ cloudwatch:
       dimensions:
         ClusterName: "dev-infra-cluster"
         ServiceName: "dev-infra"
-      # No module-to-module wiring exists (README §8.3). Paste the ARN from
+      # No module-to-module wiring exists. Paste the ARN from
       # `terraform output sns_topic_arns`. Empty means the alarm notifies nobody.
       alarm_actions: ["arn:aws:sns:ap-southeast-1:111122223333:dev-infra-alerts"]
       ok_actions: []

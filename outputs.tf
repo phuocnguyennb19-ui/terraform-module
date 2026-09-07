@@ -1,11 +1,8 @@
-# ==============================================================================
 # ROOT OUTPUTS
-# ==============================================================================
 # Every output is try()-wrapped because every module is count-gated: a disabled
 # module has no instance, and indexing it would be an error rather than a null.
-# ==============================================================================
 
-# ---- context -----------------------------------------------------------------
+# context
 
 output "environment" {
   description = "Environment this state manages."
@@ -27,7 +24,7 @@ output "enabled_modules" {
   value       = [for k, v in local.enabled : k if v]
 }
 
-# ---- networking --------------------------------------------------------------
+# networking
 
 output "vpc_id" {
   description = "VPC ID."
@@ -59,7 +56,7 @@ output "nat_public_ips" {
   value       = try(module.vpc[0].nat_public_ips, [])
 }
 
-# ---- security ----------------------------------------------------------------
+# security
 
 output "kms_key_arn" {
   description = "KMS key ARN for encryption at rest."
@@ -92,7 +89,7 @@ output "secret_arns" {
   sensitive   = true
 }
 
-# ---- edge --------------------------------------------------------------------
+# edge
 
 output "alb_dns_name" {
   description = "ALB DNS name."
@@ -114,7 +111,7 @@ output "route53_zone_ids" {
   value       = try(module.dns[0].route53_zone_zone_ids, {})
 }
 
-# ---- data --------------------------------------------------------------------
+# data
 
 output "rds_endpoint" {
   description = "RDS instance endpoint."
@@ -141,7 +138,7 @@ output "dynamodb_table_arns" {
   value       = try(module.dynamodb[0].dynamodb_table_arns, {})
 }
 
-# ---- compute -----------------------------------------------------------------
+# compute
 
 output "ecr_repository_urls" {
   description = "ECR repository URLs."
@@ -163,7 +160,7 @@ output "ecs_task_definition_arn" {
   value       = try(module.ecs_service[0].task_definition_arn, null)
 }
 
-# ---- kubernetes --------------------------------------------------------------
+# kubernetes
 
 output "eks_cluster_name" {
   description = "EKS cluster name."
@@ -190,7 +187,7 @@ output "eks_kubeconfig_command" {
   value       = try(module.eks[0].kubeconfig_command, null)
 }
 
-# ---- messaging & observability -----------------------------------------------
+# messaging & observability
 
 output "sqs_queue_urls" {
   description = "SQS queue URLs."

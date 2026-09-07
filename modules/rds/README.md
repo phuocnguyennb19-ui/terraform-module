@@ -55,7 +55,13 @@ rds:
   auto_minor_version_upgrade: true
   performance_insights_enabled: true
   monitoring_interval: 60                        # 0 disables enhanced monitoring
-  # … full list in examples/modules/rds.yml
+  enabled_cloudwatch_logs_exports: ["postgresql", "upgrade"]
+  iam_database_authentication_enabled: true
+  kms_key_id: null
+  ca_cert_identifier: "rds-ca-rsa2048-g1"
+
+# 69 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/rds.yml
 ```
 
 ## Requirements

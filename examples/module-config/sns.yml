@@ -1,15 +1,12 @@
-# ==============================================================================
 # sns — config reference
-# ==============================================================================
 # Read by modules/sns/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 sns:
   enabled: false
@@ -25,5 +22,5 @@ sns:
         oncall_email:
           protocol: "email"
           endpoint: "oncall@example.com"
-      lambda_feedback: {}                        # v6.1.1 shape (README §8.6)
+      lambda_feedback: {}                        # v6.1.1 shape
       sqs_feedback: {}

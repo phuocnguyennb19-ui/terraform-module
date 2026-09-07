@@ -1,6 +1,4 @@
-# ==============================================================================
 # DEV ENVIRONMENT
-# ==============================================================================
 # This one file is read by the root composition AND by every module: each module
 # resolves file("${path.cwd}/${var.config_file}") and picks out its own block.
 # Run Terraform from the repository root so that path stays valid.
@@ -11,7 +9,6 @@
 # the module's own defaults — see modules/<name>/locals.tf for the full set.
 # `enabled` is read by the ROOT only (it becomes a count gate); no module has an
 # internal enabled flag.
-# ==============================================================================
 
 global:
   environment: "dev"
@@ -29,7 +26,7 @@ global:
 app_name: "base"
 service_type: "infra"
 
-# ---- FOUNDATION --------------------------------------------------------------
+# FOUNDATION
 
 vpc:
   enabled: true
@@ -78,7 +75,7 @@ iam:
       custom_role_policy_arns:
         - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 
-# ---- PRIMITIVES --------------------------------------------------------------
+# PRIMITIVES
 
 security_group:
   enabled: true
@@ -139,7 +136,7 @@ sns:
     alerts:
       name: "dev-infra-alerts"
 
-# ---- EDGE & DATA -------------------------------------------------------------
+# EDGE & DATA
 # Present with real keys, switched off. Flip enabled to true to build them.
 
 acm:
@@ -190,7 +187,7 @@ sqs:
 secrets_manager:
   enabled: false
 
-# ---- COMPUTE -----------------------------------------------------------------
+# COMPUTE
 
 ecs:
   enabled: false

@@ -1,9 +1,6 @@
-# ==============================================================================
 # ROOT INPUT VARIABLES
-# ==============================================================================
 # The root takes a path, not a pile of settings. Everything else lives in the
 # environment's config.yml, because that is the file the modules themselves read.
-# ==============================================================================
 
 variable "config_file" {
   description = <<-EOT

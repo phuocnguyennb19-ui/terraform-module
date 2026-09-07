@@ -1,15 +1,12 @@
-# ==============================================================================
 # ecr — config reference
-# ==============================================================================
 # Read by modules/ecr/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 ecr:
   enabled: false

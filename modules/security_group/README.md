@@ -48,6 +48,9 @@ security_group:
   egress_cidr_blocks: ["0.0.0.0/0"]
   egress_with_source_security_group_id: []
   revoke_rules_on_delete: false
+
+# 41 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/security_group.yml
 ```
 
 ## Requirements

@@ -36,6 +36,9 @@ kms:
   key_administrators: ["arn:aws:iam::111122223333:role/platform-admin"]
   key_users:          ["arn:aws:iam::111122223333:role/dev-infra-ecs-task"]
   policy: null                        # raw JSON overrides everything above
+
+# 27 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/kms.yml
 ```
 
 ## Requirements

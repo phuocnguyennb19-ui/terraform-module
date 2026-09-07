@@ -48,6 +48,9 @@ vpc:
   private_subnet_tags:  { Tier: "Private" }
   database_subnet_tags: { Tier: "Data" }
   intra_subnet_tags:    {}
+
+# 188 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/vpc.yml
 ```
 
 ## Requirements

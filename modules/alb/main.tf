@@ -8,10 +8,7 @@ module "alb_sg" {
 
   # Each rule is EITHER a predefined rule from the upstream module's catalogue
   # (a bare key such as https-443-tcp, with no fields) OR a custom rule defined
-  # by its own fields. Previously every key went to `ingress_rules` AND was
-  # expanded into a cidr rule, so a key the catalogue did not know failed with
-  # "Invalid index ... var.rules[...]" while the same rule was also created by
-  # hand. `cidr_ipv4` is what tells the two apart.
+  # by its own fields. `cidr_ipv4` is what tells the two apart.
   ingress_rules = [
     for k, v in local.alb_sg_config.ingress_rules : k if !can(v.cidr_ipv4)
   ]
@@ -73,4 +70,33 @@ module "alb" {
   target_groups = local.target_groups
 
   tags = local.tags
+
+  # full upstream surface
+  additional_target_group_attachments                          = local.alb_config.additional_target_group_attachments
+  associate_web_acl                                            = local.alb_config.associate_web_acl
+  client_keep_alive                                            = local.alb_config.client_keep_alive
+  create                                                       = local.alb_config.create
+  create_security_group                                        = local.alb_config.create_security_group
+  customer_owned_ipv4_pool                                     = local.alb_config.customer_owned_ipv4_pool
+  default_port                                                 = local.alb_config.default_port
+  default_protocol                                             = local.alb_config.default_protocol
+  dns_record_client_routing_policy                             = local.alb_config.dns_record_client_routing_policy
+  enable_cross_zone_load_balancing                             = local.alb_config.enable_cross_zone_load_balancing
+  enable_http2                                                 = local.alb_config.enable_http2
+  enable_tls_version_and_cipher_suite_headers                  = local.alb_config.enable_tls_version_and_cipher_suite_headers
+  enable_xff_client_port                                       = local.alb_config.enable_xff_client_port
+  enforce_security_group_inbound_rules_on_private_link_traffic = local.alb_config.enforce_security_group_inbound_rules_on_private_link_traffic
+  ip_address_type                                              = local.alb_config.ip_address_type
+  name_prefix                                                  = local.alb_config.name_prefix
+  putin_khuylo                                                 = local.alb_config.putin_khuylo
+  route53_records                                              = local.alb_config.route53_records
+  security_group_description                                   = local.alb_config.security_group_description
+  security_group_egress_rules                                  = local.alb_config.security_group_egress_rules
+  security_group_ingress_rules                                 = local.alb_config.security_group_ingress_rules
+  security_group_name                                          = local.alb_config.security_group_name
+  security_group_tags                                          = local.alb_config.security_group_tags
+  security_group_use_name_prefix                               = local.alb_config.security_group_use_name_prefix
+  subnet_mapping                                               = local.alb_config.subnet_mapping
+  timeouts                                                     = local.alb_config.timeouts
+  web_acl_arn                                                  = local.alb_config.web_acl_arn
 }

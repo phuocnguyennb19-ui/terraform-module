@@ -56,7 +56,21 @@ alb:
         target_group_key: "app"
   target_groups:                                 # MAP (upstream v9)
     app:
-  # … full list in examples/modules/alb.yml
+      protocol:    "HTTP"
+      port:        8080
+      target_type: "ip"                          # ip is required for Fargate
+      health_check:
+        enabled: true
+        path:    "/healthz"
+        matcher: "200"
+  access_logs:
+    bucket:  "sm-platform-dev-logs"
+    prefix:  "alb"
+    enabled: true
+  connection_logs: {}
+
+# 26 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/alb.yml
 ```
 
 ## Requirements

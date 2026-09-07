@@ -33,6 +33,9 @@ acm:
   wait_for_validation: true                      # false in CI so apply does not block
   key_algorithm: "RSA_2048"
   certificate_transparency_logging_preference: "ENABLED"
+
+# 13 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/acm.yml
 ```
 
 ## Requirements

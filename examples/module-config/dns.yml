@@ -1,18 +1,15 @@
-# ==============================================================================
 # dns — config reference
-# ==============================================================================
 # Read by modules/dns/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Block is `dns`. Legacy key `route53` is still merged.
 # A record may use `alias: { target: "alb" }`; the root wires the ALB outputs in.
 #
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 dns:                                             # legacy key: route53
   enabled: false

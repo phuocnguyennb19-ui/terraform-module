@@ -27,6 +27,37 @@ locals {
     multi_region             = lookup(local.raw_kms_cfg, "multi_region", false)
     rotation_period_in_days  = lookup(local.raw_kms_cfg, "rotation_period_in_days", 365)
     policy                   = lookup(local.raw_kms_cfg, "policy", null)
+
+    # full upstream surface
+    # Remaining upstream arguments with a simple literal default, mapped with
+    # that same default as the fallback: omitting a key behaves as before.
+    aliases_use_name_prefix                = try(local.raw_kms_cfg.aliases_use_name_prefix, false)
+    bypass_policy_lockout_safety_check     = try(local.raw_kms_cfg.bypass_policy_lockout_safety_check, null)
+    computed_aliases                       = try(local.raw_kms_cfg.computed_aliases, {})
+    create                                 = try(local.raw_kms_cfg.create, true)
+    create_external                        = try(local.raw_kms_cfg.create_external, false)
+    create_replica                         = try(local.raw_kms_cfg.create_replica, false)
+    create_replica_external                = try(local.raw_kms_cfg.create_replica_external, false)
+    custom_key_store_id                    = try(local.raw_kms_cfg.custom_key_store_id, null)
+    enable_default_policy                  = try(local.raw_kms_cfg.enable_default_policy, true)
+    enable_route53_dnssec                  = try(local.raw_kms_cfg.enable_route53_dnssec, false)
+    grants                                 = try(local.raw_kms_cfg.grants, {})
+    is_enabled                             = try(local.raw_kms_cfg.is_enabled, null)
+    key_asymmetric_public_encryption_users = try(local.raw_kms_cfg.key_asymmetric_public_encryption_users, [])
+    key_asymmetric_sign_verify_users       = try(local.raw_kms_cfg.key_asymmetric_sign_verify_users, [])
+    key_hmac_users                         = try(local.raw_kms_cfg.key_hmac_users, [])
+    key_material_base64                    = try(local.raw_kms_cfg.key_material_base64, null)
+    key_owners                             = try(local.raw_kms_cfg.key_owners, [])
+    key_service_roles_for_autoscaling      = try(local.raw_kms_cfg.key_service_roles_for_autoscaling, [])
+    key_service_users                      = try(local.raw_kms_cfg.key_service_users, [])
+    key_statements                         = try(local.raw_kms_cfg.key_statements, {})
+    key_symmetric_encryption_users         = try(local.raw_kms_cfg.key_symmetric_encryption_users, [])
+    override_policy_documents              = try(local.raw_kms_cfg.override_policy_documents, [])
+    primary_external_key_arn               = try(local.raw_kms_cfg.primary_external_key_arn, null)
+    primary_key_arn                        = try(local.raw_kms_cfg.primary_key_arn, null)
+    route53_dnssec_sources                 = try(local.raw_kms_cfg.route53_dnssec_sources, [])
+    source_policy_documents                = try(local.raw_kms_cfg.source_policy_documents, [])
+    valid_to                               = try(local.raw_kms_cfg.valid_to, null)
   }
   kms_config = merge(local.kms_defaults, try(local.config_local.kms, {}))
 

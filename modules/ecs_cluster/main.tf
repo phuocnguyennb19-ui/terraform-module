@@ -37,4 +37,26 @@ module "ecs" {
   }
 
   tags = local.tags
+
+  # full upstream surface
+  autoscaling_capacity_providers          = local.ecs_config.autoscaling_capacity_providers
+  cloudwatch_log_group_kms_key_id         = local.ecs_config.cloudwatch_log_group_kms_key_id
+  cloudwatch_log_group_name               = local.ecs_config.cloudwatch_log_group_name
+  cloudwatch_log_group_retention_in_days  = local.ecs_config.cloudwatch_log_group_retention_in_days
+  cloudwatch_log_group_tags               = local.ecs_config.cloudwatch_log_group_tags
+  cluster_service_connect_defaults        = local.ecs_config.cluster_service_connect_defaults
+  cluster_tags                            = local.ecs_config.cluster_tags
+  create                                  = local.ecs_config.create
+  create_cloudwatch_log_group             = local.ecs_config.create_cloudwatch_log_group
+  create_task_exec_iam_role               = local.ecs_config.create_task_exec_iam_role
+  create_task_exec_policy                 = local.ecs_config.create_task_exec_policy
+  services                                = local.ecs_config.services
+  task_exec_iam_role_description          = local.ecs_config.task_exec_iam_role_description
+  task_exec_iam_role_name                 = local.ecs_config.task_exec_iam_role_name
+  task_exec_iam_role_path                 = local.ecs_config.task_exec_iam_role_path
+  task_exec_iam_role_permissions_boundary = local.ecs_config.task_exec_iam_role_permissions_boundary
+  task_exec_iam_role_policies             = local.ecs_config.task_exec_iam_role_policies
+  task_exec_iam_role_tags                 = local.ecs_config.task_exec_iam_role_tags
+  task_exec_iam_role_use_name_prefix      = local.ecs_config.task_exec_iam_role_use_name_prefix
+  task_exec_iam_statements                = local.ecs_config.task_exec_iam_statements
 }

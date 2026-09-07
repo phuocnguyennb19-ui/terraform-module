@@ -23,6 +23,23 @@ locals {
     wait_for_validation                         = lookup(local.raw_acm_cfg, "wait_for_validation", true)
     key_algorithm                               = lookup(local.raw_acm_cfg, "key_algorithm", "RSA_2048")
     certificate_transparency_logging_preference = lookup(local.raw_acm_cfg, "certificate_transparency_logging_preference", "ENABLED")
+
+    # full upstream surface
+    # Remaining upstream arguments with a simple literal default, mapped with
+    # that same default as the fallback: omitting a key behaves as before.
+    acm_certificate_domain_validation_options = try(local.raw_acm_cfg.acm_certificate_domain_validation_options, {})
+    create_certificate                        = try(local.raw_acm_cfg.create_certificate, true)
+    create_route53_records                    = try(local.raw_acm_cfg.create_route53_records, true)
+    create_route53_records_only               = try(local.raw_acm_cfg.create_route53_records_only, false)
+    distinct_domain_names                     = try(local.raw_acm_cfg.distinct_domain_names, [])
+    dns_ttl                                   = try(local.raw_acm_cfg.dns_ttl, 60)
+    putin_khuylo                              = try(local.raw_acm_cfg.putin_khuylo, true)
+    validate_certificate                      = try(local.raw_acm_cfg.validate_certificate, true)
+    validation_allow_overwrite_records        = try(local.raw_acm_cfg.validation_allow_overwrite_records, true)
+    validation_option                         = try(local.raw_acm_cfg.validation_option, {})
+    validation_record_fqdns                   = try(local.raw_acm_cfg.validation_record_fqdns, [])
+    validation_timeout                        = try(local.raw_acm_cfg.validation_timeout, null)
+    zone_id                                   = try(local.raw_acm_cfg.zone_id, "")
   }
   acm_config = merge(local.acm_defaults, try(local.config_local.acm, {}))
 

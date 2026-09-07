@@ -1,0 +1,55 @@
+# ecs_cluster — config reference
+# Read by modules/ecs_cluster/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate.
+#
+# Block is `ecs`. Legacy key `ecs_cluster` is still merged.
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/module-config"
+# or paste this block into a monolithic config.yml.
+
+ecs:                                             # legacy key: ecs_cluster
+  enabled: false
+  container_insights: true
+  kms_key_id: null                               # encrypts ECS Exec sessions
+  fargate_weight: 100                            # prod: all on-demand
+  fargate_base: 0
+  fargate_spot_weight: 0                         # dev: 0 / 100 for all-spot
+  create_task_exec_iam_role: true
+  create_task_exec_policy: true
+  task_exec_secret_arns:    ["arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:*"]
+  task_exec_ssm_param_arns: []
+
+  # Additional upstream arguments — 18 keys, grouped by concern.
+  # All commented out: the value shown is the upstream default that applies
+  # when the key is absent. Uncomment to change one.
+
+  # cloudwatch
+  # cloudwatch_log_group_kms_key_id: null
+  # cloudwatch_log_group_name: null
+  # cloudwatch_log_group_retention_in_days: 90
+  # cloudwatch_log_group_tags: {}
+
+  # cluster
+  # cluster_service_connect_defaults: {}
+  # cluster_tags: {}
+
+  # create
+  # create: true
+  # create_cloudwatch_log_group: true
+
+  # task
+  # task_exec_iam_role_description: null
+  # task_exec_iam_role_name: null
+  # task_exec_iam_role_path: null
+  # task_exec_iam_role_permissions_boundary: null
+  # task_exec_iam_role_policies: {}
+  # task_exec_iam_role_tags: {}
+  # task_exec_iam_role_use_name_prefix: true
+  # task_exec_iam_statements: {}
+
+  # other
+  # autoscaling_capacity_providers: {}
+  # services: {}

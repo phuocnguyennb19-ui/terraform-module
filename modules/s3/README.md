@@ -49,6 +49,9 @@ s3:
   intelligent_tiering: {}
   metric_configuration: []
   replication_configuration: {}
+
+# 32 further upstream arguments are listed, grouped and commented out,
+# in examples/module-config/s3.yml
 ```
 
 ## Requirements

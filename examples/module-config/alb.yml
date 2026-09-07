@@ -1,17 +1,14 @@
-# ==============================================================================
 # alb — config reference
-# ==============================================================================
 # Read by modules/alb/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Needs `vpc_id`, `vpc_cidr_block`, `public_subnets`, `private_subnets` from the root.
 #
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 alb:
   enabled: false
@@ -51,3 +48,43 @@ alb:
     prefix:  "alb"
     enabled: true
   connection_logs: {}
+
+  # Additional upstream arguments — 26 keys, grouped by concern.
+  # All commented out: the value shown is the upstream default that applies
+  # when the key is absent. Uncomment to change one.
+
+  # create
+  # create: true
+  # create_security_group: true
+
+  # default
+  # default_port: 80
+  # default_protocol: "HTTP"
+
+  # enable
+  # enable_cross_zone_load_balancing: true
+  # enable_http2: null
+  # enable_tls_version_and_cipher_suite_headers: null
+  # enable_xff_client_port: null
+
+  # security
+  # security_group_description: null
+  # security_group_egress_rules: {}
+  # security_group_name: null
+  # security_group_tags: {}
+  # security_group_use_name_prefix: true
+
+  # other
+  # additional_target_group_attachments: {}
+  # associate_web_acl: false
+  # client_keep_alive: null
+  # customer_owned_ipv4_pool: null
+  # dns_record_client_routing_policy: null
+  # enforce_security_group_inbound_rules_on_private_link_traffic: null
+  # ip_address_type: null
+  # name_prefix: null
+  # putin_khuylo: true
+  # route53_records: {}
+  # subnet_mapping: []
+  # timeouts: {}
+  # web_acl_arn: null

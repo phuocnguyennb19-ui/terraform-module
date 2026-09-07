@@ -1,24 +1,16 @@
-# ==============================================================================
-# PROVIDER CONFIGURATION
-# ==============================================================================
-# Providers are configured here and only here. No module under modules/ declares
-# a provider block, which is what lets the same module serve every environment.
-#
-# Two targets, one provider. Leaving localstack_endpoint unset talks to real AWS
-# through the normal credential chain; setting it redirects every service this
-# repository can build to a local emulator and swaps in throwaway credentials.
+# Providers are configured here and only here; no module under modules/ declares
+# one, which is what lets the same module serve every environment. Leaving
+# localstack_endpoint unset talks to real AWS through the normal credential
+# chain; setting it redirects to a local emulator with throwaway credentials.
 #
 #   terraform plan -var="localstack_endpoint=http://localhost:4566"
 #
-# ⚠ Every service a module touches must appear in the endpoints block below.
-#   A service that is missing does not fail — it silently leaves for REAL AWS.
-#   That is how a CreateLogGroup call reached the real account and was stopped
-#   only by the credentials being fake. When a module is added to this repo, add
-#   its service here in the same change.
+# WARNING: every service a module touches must appear in the endpoints block
+# below. A missing service does not fail — it silently leaves for REAL AWS. When
+# a module is added to this repo, add its service here in the same change.
 #
-# The region and tags come from the environment's config.yml, so a run cannot
-# target a region the config does not name.
-# ==============================================================================
+# Region and tags come from the environment's config.yml, so a run cannot target
+# a region the config does not name.
 
 locals {
   use_localstack = var.localstack_endpoint != null
@@ -48,7 +40,7 @@ provider "aws" {
       ec2 = var.localstack_endpoint
       s3  = var.localstack_endpoint
 
-      # Observability — `logs` was the one missing before.
+      # Observability
       logs       = var.localstack_endpoint
       cloudwatch = var.localstack_endpoint
       events     = var.localstack_endpoint

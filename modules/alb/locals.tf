@@ -27,6 +27,37 @@ locals {
     enable_waf_fail_open       = lookup(local.raw_alb_cfg, "enable_waf_fail_open", false)
     access_logs                = lookup(local.raw_alb_cfg, "access_logs", {})
     connection_logs            = lookup(local.raw_alb_cfg, "connection_logs", {})
+
+    # full upstream surface
+    # Remaining upstream arguments with a simple literal default, mapped with
+    # that same default as the fallback: omitting a key behaves as before.
+    additional_target_group_attachments                          = try(local.raw_alb_cfg.additional_target_group_attachments, {})
+    associate_web_acl                                            = try(local.raw_alb_cfg.associate_web_acl, false)
+    client_keep_alive                                            = try(local.raw_alb_cfg.client_keep_alive, null)
+    create                                                       = try(local.raw_alb_cfg.create, true)
+    create_security_group                                        = try(local.raw_alb_cfg.create_security_group, true)
+    customer_owned_ipv4_pool                                     = try(local.raw_alb_cfg.customer_owned_ipv4_pool, null)
+    default_port                                                 = try(local.raw_alb_cfg.default_port, 80)
+    default_protocol                                             = try(local.raw_alb_cfg.default_protocol, "HTTP")
+    dns_record_client_routing_policy                             = try(local.raw_alb_cfg.dns_record_client_routing_policy, null)
+    enable_cross_zone_load_balancing                             = try(local.raw_alb_cfg.enable_cross_zone_load_balancing, true)
+    enable_http2                                                 = try(local.raw_alb_cfg.enable_http2, null)
+    enable_tls_version_and_cipher_suite_headers                  = try(local.raw_alb_cfg.enable_tls_version_and_cipher_suite_headers, null)
+    enable_xff_client_port                                       = try(local.raw_alb_cfg.enable_xff_client_port, null)
+    enforce_security_group_inbound_rules_on_private_link_traffic = try(local.raw_alb_cfg.enforce_security_group_inbound_rules_on_private_link_traffic, null)
+    ip_address_type                                              = try(local.raw_alb_cfg.ip_address_type, null)
+    name_prefix                                                  = try(local.raw_alb_cfg.name_prefix, null)
+    putin_khuylo                                                 = try(local.raw_alb_cfg.putin_khuylo, true)
+    route53_records                                              = try(local.raw_alb_cfg.route53_records, {})
+    security_group_description                                   = try(local.raw_alb_cfg.security_group_description, null)
+    security_group_egress_rules                                  = try(local.raw_alb_cfg.security_group_egress_rules, {})
+    security_group_ingress_rules                                 = try(local.raw_alb_cfg.security_group_ingress_rules, {})
+    security_group_name                                          = try(local.raw_alb_cfg.security_group_name, null)
+    security_group_tags                                          = try(local.raw_alb_cfg.security_group_tags, {})
+    security_group_use_name_prefix                               = try(local.raw_alb_cfg.security_group_use_name_prefix, true)
+    subnet_mapping                                               = try(local.raw_alb_cfg.subnet_mapping, [])
+    timeouts                                                     = try(local.raw_alb_cfg.timeouts, {})
+    web_acl_arn                                                  = try(local.raw_alb_cfg.web_acl_arn, null)
   }
   alb_config = merge(local.alb_defaults, try(local.config_local.alb, {}))
 

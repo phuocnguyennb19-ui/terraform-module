@@ -1,6 +1,4 @@
-# ==============================================================================
 # ROOT COMPOSITION
-# ==============================================================================
 # Wires the modules under modules/ into one stack for one environment.
 #
 #   - Every module is gated by count, because no module has an internal
@@ -12,11 +10,8 @@
 #
 # Bands below are dependency order. Terraform derives the real order from the
 # references — the grouping is for the reader.
-# ==============================================================================
 
-# ------------------------------------------------------------------------------
 # BAND 1 — FOUNDATION
-# ------------------------------------------------------------------------------
 
 module "vpc" {
   count  = local.enabled.vpc ? 1 : 0
@@ -48,9 +43,7 @@ module "iam" {
   tags          = var.tags
 }
 
-# ------------------------------------------------------------------------------
 # BAND 2 — PRIMITIVES
-# ------------------------------------------------------------------------------
 
 module "security_group" {
   count  = local.enabled.security_group ? 1 : 0
@@ -154,9 +147,7 @@ module "cloudwatch" {
   tags          = var.tags
 }
 
-# ------------------------------------------------------------------------------
 # BAND 3 — EDGE & DATA
-# ------------------------------------------------------------------------------
 
 module "alb" {
   count  = local.enabled.alb ? 1 : 0
@@ -215,9 +206,7 @@ module "dns" {
   tags          = var.tags
 }
 
-# ------------------------------------------------------------------------------
 # BAND 4 — COMPUTE
-# ------------------------------------------------------------------------------
 
 module "ecs_cluster" {
   count  = local.enabled.ecs_cluster ? 1 : 0

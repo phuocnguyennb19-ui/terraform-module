@@ -1,0 +1,41 @@
+# acm — config reference
+# Read by modules/acm/locals.tf. Every key below appears in that file; anything
+# you omit falls back to the module's own default.
+#
+# `enabled` is read by the ROOT and becomes a count gate.
+#
+# Used as an overlay in directory mode:
+#   terraform plan -var="config_dir=examples/module-config"
+# or paste this block into a monolithic config.yml.
+
+acm:
+  enabled: false
+  domain_name: "dev.platform.example.com"
+  subject_alternative_names: ["*.dev.platform.example.com"]
+  validation_method: "DNS"                       # DNS | EMAIL
+  wait_for_validation: true                      # false in CI so apply does not block
+  key_algorithm: "RSA_2048"
+  certificate_transparency_logging_preference: "ENABLED"
+
+  # Additional upstream arguments — 13 keys, grouped by concern.
+  # All commented out: the value shown is the upstream default that applies
+  # when the key is absent. Uncomment to change one.
+
+  # create
+  # create_certificate: true
+  # create_route53_records: true
+  # create_route53_records_only: false
+
+  # validation
+  # validation_allow_overwrite_records: true
+  # validation_option: {}
+  # validation_record_fqdns: []
+  # validation_timeout: null
+
+  # other
+  # acm_certificate_domain_validation_options: {}
+  # distinct_domain_names: []
+  # dns_ttl: 60
+  # putin_khuylo: true
+  # validate_certificate: true
+  # zone_id: ""

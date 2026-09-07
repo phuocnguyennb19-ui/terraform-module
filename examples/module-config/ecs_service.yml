@@ -1,18 +1,22 @@
-# ==============================================================================
 # ecs_service — config reference
-# ==============================================================================
 # Read by modules/ecs_service/locals.tf. Every key below appears in that file; anything
 # you omit falls back to the module's own default.
 #
-# `enabled` is read by the ROOT and becomes a count gate (README §4.4).
+# `enabled` is read by the ROOT and becomes a count gate.
 #
 # Block is `service` (legacy `ecs_service`). `autoscaling` is a separate
 # block at the YAML root, read by the same module — both live in this file.
 #
+# PRECEDENCE — task_definition, container_definitions and volumes may be written
+# under `service:` or at the YAML root, and they do NOT resolve the same way:
+#   task_definition        root overrides nested   (merge(nested, root))
+#   container_definitions  nested wins, root is the fallback
+#   volumes                nested wins, root is the fallback
+# cpu/memory fall back service.task_definition.cpu -> service.cpu -> 256.
+#
 # Used as an overlay in directory mode:
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 # or paste this block into a monolithic config.yml.
-# ==============================================================================
 
 service:                                         # legacy key: ecs_service
   enabled: false

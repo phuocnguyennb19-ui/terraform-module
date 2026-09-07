@@ -20,7 +20,13 @@ locals {
     try(local.config_local.ecs_service, {})
   )
 
-  # 4. Task Definition Mapping (Prefer nested, fallback to root)
+  # 4. Task Definition Mapping.
+  #
+  # NOTE the precedence: merge() lets the SECOND argument win, so a root-level
+  # `task_definition:` OVERRIDES `service.task_definition`. That is the opposite
+  # of container_definitions and volumes below, which prefer the nested copy.
+  # The behaviour is left as-is because changing it would silently move config
+  # for anyone relying on it; the inconsistency is documented instead.
   raw_task_cfg = merge(
     try(local.raw_service_cfg.task_definition, {}),
     try(local.config_local.task_definition, {})

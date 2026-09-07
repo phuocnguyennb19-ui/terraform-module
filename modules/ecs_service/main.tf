@@ -46,7 +46,7 @@ resource "aws_lb_listener_rule" "app" {
   tags = local.tags
 }
 
-# --- ECS Service ---
+# ECS Service
 module "ecs_service" {
   source = "git::https://github.com/terraform-aws-modules/terraform-aws-ecs.git//modules/service?ref=v5.11.4"
 

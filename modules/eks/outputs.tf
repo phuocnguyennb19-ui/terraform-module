@@ -1,6 +1,4 @@
-# ==========================================
 # CLUSTER
-# ==========================================
 
 output "cluster_name" {
   description = "Name of the EKS cluster"
@@ -28,9 +26,7 @@ output "cluster_certificate_authority_data" {
   sensitive   = true
 }
 
-# ==========================================
 # IDENTITY — IRSA
-# ==========================================
 
 output "oidc_provider_arn" {
   description = "ARN of the IAM OIDC provider, for IRSA role trust policies"
@@ -42,9 +38,7 @@ output "oidc_provider_url" {
   value       = try(module.eks.cluster_oidc_issuer_url, null)
 }
 
-# ==========================================
 # SECURITY
-# ==========================================
 
 output "cluster_security_group_id" {
   description = "Security group ID attached to the control plane"
@@ -61,9 +55,7 @@ output "kms_key_arn" {
   value       = try(module.eks.kms_key_arn, null)
 }
 
-# ==========================================
 # NODE GROUPS
-# ==========================================
 
 output "eks_managed_node_groups" {
   description = "Attributes of each managed node group"
@@ -80,9 +72,7 @@ output "fargate_profiles" {
   value       = try(module.eks.fargate_profiles, {})
 }
 
-# ==========================================
 # KUBECONFIG
-# ==========================================
 
 output "kubeconfig_command" {
   description = "Command that writes a kubeconfig entry for this cluster"

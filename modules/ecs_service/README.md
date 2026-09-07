@@ -57,8 +57,57 @@ service:                                         # legacy key: ecs_service
     family: "dev-infra-task"
     network_mode: "awsvpc"
     requires_compatibilities: ["FARGATE"]
-  # … full list in examples/modules/ecs_service.yml
+    cpu: 512
+    memory: 1024
+    execution_role_arn: null                     # null = the cluster's role
+    task_role_arn: null
+  container_definitions:
+    - name: "app"
+      image: "111122223333.dkr.ecr.ap-southeast-1.amazonaws.com/core-backend-api:1.4.2"
+      essential: true
+      cpu: 512
+      memory: 1024
+      command: []
+      port_mappings:
+        - { container_port: 8080, protocol: "tcp" }
+      environment:                               # map, converted to name/value pairs
+        LOG_LEVEL: "info"
+        APP_ENV: "dev"
+      secrets:                                   # map of NAME -> ARN, never a value
+        DB_PASSWORD: "arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:db-abc"
+      mount_points: []
+      depends_on: []
+  volumes: []
+
+autoscaling:                                     # its own block at the YAML root
+  enabled: false
+  min_capacity: 3
+  max_capacity: 12
+  target_cpu_utilization: 60                     # 0 disables the CPU policy
+  target_memory_utilization: 70                  # 0 disables the memory policy
 ```
+
+## Nested vs root blocks
+
+`task_definition`, `container_definitions` and `volumes` can each be written **inside**
+`service:` or at the **root** of the YAML. The precedence is not the same for all three:
+
+| Key | Written under `service:` | Written at YAML root | Which wins |
+|---|---|---|---|
+| `task_definition` | yes | yes | **root** overrides nested |
+| `container_definitions` | yes | yes | **nested** wins, root is the fallback |
+| `volumes` | yes | yes | **nested** wins, root is the fallback |
+| `autoscaling` | no | yes | root only |
+
+`task_definition` uses `merge(nested, root)`, and `merge()` lets the later argument win — so a
+root-level `task_definition:` silently overrides the one under `service:`. The other two use
+`lookup`/`try` with the nested copy first. Pick one placement per environment and keep to it.
+
+`cpu` and `memory` fall back further: `service.task_definition.cpu` → `service.cpu` → `256`,
+and the same for `memory` → `512`.
+
+If no `container_definitions` is given at all, the module builds a single container named `app`
+from `service.image` and `service.port`.
 
 ## Requirements
 

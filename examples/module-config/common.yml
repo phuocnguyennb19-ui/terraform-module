@@ -1,18 +1,15 @@
-# ==============================================================================
 # common.yml — the base every module in this directory starts from
-# ==============================================================================
 # REQUIRED in directory mode. A missing common.yml is a hard error, on purpose:
 # silently falling back to defaults is how an environment gets built wrong.
 #
-#   terraform plan -var="config_dir=examples/modules"
+#   terraform plan -var="config_dir=examples/module-config"
 #
 # Precedence, lowest to highest:
 #   module defaults (locals.tf)  ->  common.yml  ->  <module>.yml
 #
 # The merge is TWO LEVELS DEEP. A per-module file overrides individual keys
 # inside a block without discarding the rest of that block from here. Lists are
-# replaced wholesale, not concatenated. See README §4.5.
-# ==============================================================================
+# replaced wholesale, not concatenated.
 
 global:
   environment: "dev"                  # VALIDATED: dev | test | staging | preprod | prod
@@ -28,14 +25,12 @@ global:
 app_name: "base"
 service_type: "infra"
 
-# ---- shared defaults ---------------------------------------------------------
-# These are deliberately overridden by the per-module files, to demonstrate that
-# a targeted override does not wipe the rest of the block:
+# shared defaults
+# A key set in <module>.yml overrides the one here without wiping the rest of the
+# block -- the merge is two levels deep, not shallow.
 #
-#   kms.yml sets deletion_window_in_days: 7   (overrides the 30 below)
-#   s3.yml  sets force_destroy: true          (overrides the false below)
-#
-# Everything else in those blocks survives from here.
+# NOTE: kms.yml and s3.yml currently repeat the same values as below, so neither
+# actually demonstrates an override. Change one of them to see the merge work.
 
 kms:
   deletion_window_in_days: 30

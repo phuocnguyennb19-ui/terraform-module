@@ -1,11 +1,8 @@
-# ==============================================================================
 # PRODUCTION ENVIRONMENT
-# ==============================================================================
 # Structurally identical to staging/config.yml. Only the values differ.
 #
 #   make plan ENV=prod       # plan is read-only and safe
 #   make apply ENV=prod      # requires an explicit approval — see Makefile
-# ==============================================================================
 
 global:
   environment: "prod"

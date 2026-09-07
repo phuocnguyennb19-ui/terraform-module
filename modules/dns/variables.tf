@@ -33,7 +33,7 @@ variable "tags" {
   default     = {}
 }
 
-# ---- wiring inputs, supplied by the caller -----------------------------------
+# wiring inputs, supplied by the caller
 # A Route53 alias needs the target's DNS name and hosted-zone ID, which are
 # outputs of another module, not values anyone can put in YAML. A record declares
 # `alias: { target: "alb" }` and the module substitutes what the caller passed in.

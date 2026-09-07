@@ -12,7 +12,7 @@ module's default. Filenames match the directory under `modules/`.
 The directory is a valid layered config:
 
 ```bash
-terraform plan -var="config_dir=examples/modules"
+terraform plan -var="config_dir=examples/module-config"
 ```
 
 The root reads `common.yml` (required) plus an optional `<module>.yml` for each module.
