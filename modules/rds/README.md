@@ -1,113 +1,51 @@
 # rds
 
-RDS instance, its subnet group and security group.
-
-Wraps `terraform-aws-security-group` (v5.1.0), `terraform-aws-rds` (v6.10.0). Configuration comes from the `rds:` block of a YAML file.
-
 ## Usage
 
 ```hcl
 module "rds" {
-  source = "../../modules/rds"
+  source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/rds?ref=v1.0.0"
 
-  config_file = "config.yml"
+  identifier           = local.name_prefix
+  engine_version       = "16.4"
+  family               = "postgres16"
+  major_engine_version = "16"
+  db_subnet_group_name = module.vpc.database_subnet_group_name
+  security_group_ids   = [module.security_groups.ecs_sg_id]
 
-  global_config = {
-    environment = "dev"
-    region      = "ap-southeast-1"
-    project     = "SM-Platform"
-  }
-
-  vpc_id = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnets
-  vpc_cidr_block = module.vpc.vpc_cidr_block
+  tags                 = local.tags
 }
 ```
 
-```yaml
-# config.yml
-app_name: "base"
-service_type: "infra"
+Every input not listed above has a default — 30 of them. See `variables.tf`.
 
-rds:
-  enabled: false
-  engine: "postgres"
-  engine_version: "16.3"
-  major_engine_version: "16"
-  family: "postgres16"
-  instance_class: "db.t4g.micro"                 # prod: db.m6g.large
-  allocated_storage: 20
-  max_allocated_storage: 100                     # 0 disables storage autoscaling
-  storage_type: "gp3"
-  storage_throughput: null
-  iops: null
-  multi_az: false                                # true in prod
-  port: 5432
-  username: "appuser"                            # password is an AWS-managed secret
-  backup_retention_period: 7                     # 0 disables backups — never in prod
-  backup_window: "17:00-18:00"                   # UTC
-  maintenance_window: "Sun:18:00-Sun:19:00"
-  deletion_protection: true
-  skip_final_snapshot: false
-  final_snapshot_identifier_prefix: "final"
-  copy_tags_to_snapshot: true
-  apply_immediately: false                       # true restarts outside the window
-  auto_minor_version_upgrade: true
-  performance_insights_enabled: true
-  monitoring_interval: 60                        # 0 disables enhanced monitoring
-  enabled_cloudwatch_logs_exports: ["postgresql", "upgrade"]
-  iam_database_authentication_enabled: true
-  kms_key_id: null
-  ca_cert_identifier: "rds-ca-rsa2048-g1"
+## Required inputs
 
-# 69 further upstream arguments are listed, grouped and commented out,
-# in examples/module-config/rds.yml
-```
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0, < 6.0 |
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| aws | >= 5.0, < 6.0 |
-
-Configured by the caller. This module declares no `provider` and no `backend`.
-
-## Modules
-
-| Name | Source | Version |
-|------|--------|---------|
-| `terraform-aws-security-group` | `terraform-aws-security-group` | `v5.1.0` |
-| `terraform-aws-rds` | `terraform-aws-rds` | `v6.10.0` |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `vpc_id` | VPC ID for same-stack orchestration | `string` | `null` | no |
-| `private_subnets` | Subnet IDs for same-stack orchestration | `list(string)` | `null` | no |
-| `vpc_cidr_block` | VPC CIDR block for security group ingress rules | `string` | `"10.0.0.0/16"` | no |
-| `global_config` | Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod. | `object` | n/a | **yes** |
-| `config_file` | Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory. | `string` | `"config.yml"` | no |
-| `manual_config` | Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly. | `any` | `{}` | no |
-| `tags` | Extra tags, merged over the ones derived from `global_config`. | `map(string)` | `{}` | no |
+| Name | Type | Description |
+|---|---|---|
+| `identifier` | `string` | DB instance identifier, e.g. "dev-postgres". |
+| `engine_version` | `string` | Engine version, e.g. "16.4" for PostgreSQL or "8.0.39" for MySQL. |
+| `family` | `string` | Parameter group family, e.g. "postgres16" or "mysql8.0". Must match engine_version's major — a mismatch is rejected at apply, not at plan. |
+| `major_engine_version` | `string` | Major engine version for the option group, e.g. "16" or "8.0". |
+| `db_subnet_group_name` | `string` | DB subnet group. From module.vpc.database_subnet_group_name. Those subnets have no internet gateway route and no NAT route, so the database has no path to or from the internet regardless of what a security group says. |
+| `security_group_ids` | `list(string)` | Security groups for the instance. From module.security_groups.rds_sg_id, which allows the database port from the application tiers and nothing else. |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `db_instance_address` | Hostname of the RDS instance |
-| `db_instance_arn` | ARN of the RDS instance |
-| `db_instance_endpoint` | Connection endpoint (host:port) |
-| `db_instance_id` | Identifier of the RDS instance |
-| `db_instance_port` | Port of the RDS instance |
-| `db_instance_name` | Database name |
-| `db_master_user_secret_arn` | ARN of the Secrets Manager secret holding the master user credentials |
-| `db_security_group_id` | ID of the RDS security group |
-| `db_subnet_group_name` | Name of the DB subnet group |
+|---|---|
+| `instance_id` | DB instance identifier. |
+| `instance_arn` | DB instance ARN. |
+| `endpoint` | Connection endpoint in host:port form. |
+| `address` | Hostname of the instance, without the port. |
+| `port` | Port the instance listens on. |
+| `database_name` | Name of the initial database. |
+| `username` | Master username. The password is not an output of this module and never exists in Terraform state — read it from master_user_secret_arn. |
+| `master_user_secret_arn` |  |
+| `parameter_group_name` | DB parameter group name. |
+| `cloudwatch_log_groups` | CloudWatch log groups the instance exports to. |
+
+## Notes
+
+- Pin a tag in `source`, never a branch.
+- A worked, wired-together example is in [`examples/complete`](../../examples/complete).

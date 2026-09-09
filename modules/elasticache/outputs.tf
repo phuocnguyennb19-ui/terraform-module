@@ -1,29 +1,39 @@
-output "cluster_id" {
-  description = "ID of the ElastiCache cluster"
-  value       = try(module.elasticache.cluster_id, null)
+output "replication_group_id" {
+  description = "Replication group ID."
+  value       = aws_elasticache_replication_group.this.id
 }
 
-output "cluster_arn" {
-  description = "ARN of the ElastiCache cluster"
-  value       = try(module.elasticache.arn, null)
+output "arn" {
+  description = "Replication group ARN."
+  value       = aws_elasticache_replication_group.this.arn
 }
 
 output "primary_endpoint_address" {
-  description = "Primary endpoint address (Redis replication group)"
-  value       = try(module.elasticache.primary_endpoint_address, null)
+  description = "Primary endpoint for writes, when cluster mode is off. Null in cluster mode — use configuration_endpoint_address."
+  value       = aws_elasticache_replication_group.this.primary_endpoint_address
 }
 
 output "reader_endpoint_address" {
-  description = "Reader endpoint address (Redis replication group)"
-  value       = try(module.elasticache.reader_endpoint_address, null)
+  description = "Reader endpoint, which load-balances across replicas. Null in cluster mode."
+  value       = aws_elasticache_replication_group.this.reader_endpoint_address
 }
 
-output "cluster_endpoint" {
-  description = "Cluster endpoint (Memcached / Redis Cluster Mode)"
-  value       = try(module.elasticache.cluster_address, null)
+output "configuration_endpoint_address" {
+  description = "Configuration endpoint, used by cluster-mode clients. Null when cluster mode is off."
+  value       = aws_elasticache_replication_group.this.configuration_endpoint_address
 }
 
 output "port" {
-  description = "Port of the ElastiCache cluster"
-  value       = local.elasticache_config.port
+  description = "Port the cache listens on."
+  value       = var.port
+}
+
+output "member_clusters" {
+  description = "Individual cache cluster IDs in the group."
+  value       = aws_elasticache_replication_group.this.member_clusters
+}
+
+output "parameter_group_name" {
+  description = "Parameter group name."
+  value       = aws_elasticache_parameter_group.this.name
 }

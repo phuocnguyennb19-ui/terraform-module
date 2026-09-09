@@ -1,82 +1,35 @@
 # kms
 
-KMS key with aliases and a grant policy.
-
-Wraps `terraform-aws-kms` (v2.2.1). Configuration comes from the `kms:` block of a YAML file.
-
 ## Usage
 
 ```hcl
 module "kms" {
-  source = "../../modules/kms"
+  source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/kms?ref=v1.0.0"
 
-  config_file = "config.yml"
+  name = local.name_prefix
 
-  global_config = {
-    environment = "dev"
-    region      = "ap-southeast-1"
-    project     = "SM-Platform"
-  }
+  tags = local.tags
 }
 ```
 
-```yaml
-# config.yml
-app_name: "base"
-service_type: "infra"
+Every input not listed above has a default — 2 of them. See `variables.tf`.
 
-kms:
-  enabled: false
-  description: "Master key for dev-infra"
-  aliases: ["alias/dev-infra-key"]
-  deletion_window_in_days: 30         # 7 is the AWS minimum
-  key_usage: "ENCRYPT_DECRYPT"
-  customer_master_key_spec: "SYMMETRIC_DEFAULT"
-  multi_region: false
-  key_administrators: ["arn:aws:iam::111122223333:role/platform-admin"]
-  key_users:          ["arn:aws:iam::111122223333:role/dev-infra-ecs-task"]
-  policy: null                        # raw JSON overrides everything above
+## Required inputs
 
-# 27 further upstream arguments are listed, grouped and commented out,
-# in examples/module-config/kms.yml
-```
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0, < 6.0 |
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| aws | >= 5.0, < 6.0 |
-
-Configured by the caller. This module declares no `provider` and no `backend`.
-
-## Modules
-
-| Name | Source | Version |
-|------|--------|---------|
-| `terraform-aws-kms` | `terraform-aws-kms` | `v2.2.1` |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `global_config` | Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod. | `object` | n/a | **yes** |
-| `config_file` | Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory. | `string` | `"config.yml"` | no |
-| `manual_config` | Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly. | `any` | `{}` | no |
-| `tags` | Extra tags, merged over the ones derived from `global_config`. | `map(string)` | `{}` | no |
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Name prefix, conventionally "<project>-<environment>". Aliases become alias/<name>-<key>. |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `key_arn` | ARN of the KMS key |
-| `key_id` | ID of the KMS key |
-| `key_alias_arn` | ARN of the primary KMS key alias |
-| `key_alias_name` | Name of the primary KMS key alias |
-| `all_aliases` | Map of all KMS key aliases |
+|---|---|
+| `key_arns` | Map of purpose to KMS key ARN. This is what every other module consumes, e.g. module.kms.key_arns["rds"]. |
+| `key_ids` | Map of purpose to KMS key ID. |
+| `alias_names` | Map of purpose to alias name. |
+| `alias_arns` | Map of purpose to alias ARN. |
+
+## Notes
+
+- Pin a tag in `source`, never a branch.
+- A worked, wired-together example is in [`examples/complete`](../../examples/complete).

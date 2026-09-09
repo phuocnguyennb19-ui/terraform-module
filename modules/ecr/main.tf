@@ -1,39 +1,107 @@
-module "ecr" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-ecr.git?ref=v2.2.1"
+# ECR REPOSITORIES
+#
+# Written against the provider directly rather than wrapped around a community
+# module: the resource surface is three resources wide, and the lifecycle policy
+# is the only part with real content.
+#
+# The two defaults worth arguing about:
+#
+#   IMMUTABLE tags — a mutable tag means "app:v1.4.2" can point at different
+#   bytes tomorrow than it does today, which makes a rollback to a tag a guess.
+#   Set MUTABLE per repository only for something like a "latest" dev scratch
+#   repository where that is the intent.
+#
+#   Lifecycle expiry — ECR bills for storage and every CI run adds a layer. The
+#   policy below expires untagged images quickly and caps the number of tagged
+#   ones. Rules run in priority order and the FIRST match wins, so the untagged
+#   rule is evaluated before the tagged-count rule.
 
-  for_each = toset(local.ecr_config.repository_names)
+locals {
+  repository_names = {
+    for k, v in var.repositories : k => var.use_name_prefix ? "${var.name}/${k}" : k
+  }
+}
 
-  repository_name = each.key
-  repository_type = "private"
+resource "aws_ecr_repository" "this" {
+  for_each = var.repositories
 
-  repository_image_tag_mutability   = local.ecr_config.image_tag_mutability
-  repository_force_delete           = local.ecr_config.repository_force_delete
-  repository_read_access_arns       = local.ecr_config.read_access_arns
-  repository_read_write_access_arns = local.ecr_config.read_write_access_arns
+  name                 = local.repository_names[each.key]
+  image_tag_mutability = each.value.image_tag_mutability
+  force_delete         = each.value.force_delete
 
-  repository_encryption_type = local.ecr_config.encryption_type
-  repository_kms_key         = local.ecr_config.kms_key
+  image_scanning_configuration {
+    scan_on_push = each.value.scan_on_push
+  }
 
-  # Image Scanning
-  repository_image_scan_on_push = local.ecr_config.scan_on_push
+  encryption_configuration {
+    encryption_type = var.kms_key_arn != null ? "KMS" : "AES256"
+    kms_key         = var.kms_key_arn
+  }
 
-  # Lifecycle Policy
-  repository_lifecycle_policy = local.ecr_config.lifecycle_policy != null ? local.ecr_config.lifecycle_policy : jsonencode({
+  tags = merge(var.tags, each.value.tags, { Name = local.repository_names[each.key] })
+}
+
+resource "aws_ecr_lifecycle_policy" "this" {
+  for_each = var.repositories
+
+  repository = aws_ecr_repository.this[each.key].name
+
+  policy = jsonencode({
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 30 images"
+        description  = "Expire untagged images after ${each.value.untagged_expiry_days} days"
         selection = {
-          tagStatus   = "any"
-          countType   = "imageCountMoreThan"
-          countNumber = 30
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = each.value.untagged_expiry_days
         }
-        action = {
-          type = "expire"
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep the last ${each.value.keep_tagged_count} released images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = each.value.tag_prefixes
+          countType     = "imageCountMoreThan"
+          countNumber   = each.value.keep_tagged_count
         }
-      }
+        action = { type = "expire" }
+      },
     ]
   })
+}
 
-  tags = local.tags
+# Cross-account or cross-role pull access. Omitted entirely when no principal is
+# named, so a repository without an explicit grant is reachable only through IAM
+# in the owning account.
+data "aws_iam_policy_document" "pull" {
+  for_each = { for k, v in var.repositories : k => v if length(v.pull_principal_arns) > 0 }
+
+  statement {
+    sid    = "AllowPull"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = each.value.pull_principal_arns
+    }
+
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:DescribeImages",
+      "ecr:DescribeRepositories",
+    ]
+  }
+}
+
+resource "aws_ecr_repository_policy" "this" {
+  for_each = data.aws_iam_policy_document.pull
+
+  repository = aws_ecr_repository.this[each.key].name
+  policy     = each.value.json
 }

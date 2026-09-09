@@ -1,227 +1,181 @@
+# FOUNDATION — the VPC every workload in the environment shares.
+#
+# This module is the only place in the platform that creates a VPC, subnets, an
+# internet gateway, NAT gateways or route tables. Workload modules (eks, ec2,
+# rds, elasticache, lambda, alb) take vpc_id and subnet IDs as inputs and never
+# create network infrastructure of their own. That is what makes the same
+# network boundary reusable by every workload instead of each one building a
+# parallel island.
+#
+# Upstream: terraform-aws-modules/vpc/aws — the de facto standard implementation
+# of this pattern. It is wrapped rather than used directly so the platform's own
+# interface (name / cidr_block / az_count) stays stable if upstream changes.
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "5.13.0"
+  version = "5.21.0"
 
-  name = local.vpc_config.name
-  cidr = local.vpc_config.cidr
-  azs  = local.vpc_config.azs
+  name = var.name
+  cidr = var.cidr_block
+  azs  = local.azs
 
-  private_subnets  = local.vpc_config.private_subnets
-  public_subnets   = local.vpc_config.public_subnets
-  database_subnets = local.vpc_config.database_subnets
-  intra_subnets    = local.vpc_config.intra_subnets
+  private_subnets  = local.private_subnet_cidrs
+  public_subnets   = local.public_subnet_cidrs
+  database_subnets = local.database_subnet_cidrs
 
-  enable_nat_gateway     = local.vpc_config.enable_nat_gateway
-  single_nat_gateway     = local.vpc_config.single_nat_gateway
-  one_nat_gateway_per_az = local.vpc_config.one_nat_gateway_per_az
+  # DNS hostnames are required for RDS endpoints, VPC interface endpoints and
+  # EKS private cluster endpoint resolution.
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
-  enable_dns_hostnames = local.vpc_config.enable_dns_hostnames
-  enable_dns_support   = local.vpc_config.enable_dns_support
-  enable_vpn_gateway   = local.vpc_config.enable_vpn_gateway
+  # ---- Egress -------------------------------------------------------------
+  enable_nat_gateway     = var.enable_nat_gateway
+  single_nat_gateway     = var.single_nat_gateway
+  one_nat_gateway_per_az = var.single_nat_gateway ? false : var.one_nat_gateway_per_az
 
-  create_database_subnet_group       = local.vpc_config.create_database_subnet_group
-  create_database_subnet_route_table = local.vpc_config.create_database_subnet_route_table
+  # ---- Database tier isolation -------------------------------------------
+  # No IGW route and no NAT route: the database subnets can be reached from the
+  # application tier and from nowhere else. This is the structural half of "do
+  # not expose RDS to 0.0.0.0/0"; the security group is the other half.
+  create_database_subnet_group           = var.create_database_subnet_group
+  create_database_subnet_route_table     = true
+  create_database_internet_gateway_route = false
+  create_database_nat_gateway_route      = false
 
-  public_subnet_tags   = local.vpc_config.public_subnet_tags
-  private_subnet_tags  = local.vpc_config.private_subnet_tags
-  database_subnet_tags = local.vpc_config.database_subnet_tags
-  intra_subnet_tags    = local.vpc_config.intra_subnet_tags
+  create_elasticache_subnet_group = false
+  map_public_ip_on_launch         = false
+  manage_default_security_group   = true
+  default_security_group_ingress  = []
+  default_security_group_egress   = []
+  default_security_group_name     = "${var.name}-default-DO-NOT-USE"
 
-  enable_flow_log                      = local.vpc_config.enable_flow_log
-  create_flow_log_cloudwatch_log_group = local.vpc_config.enable_flow_log
-  create_flow_log_cloudwatch_iam_role  = local.vpc_config.enable_flow_log
-  flow_log_traffic_type                = local.vpc_config.flow_log_traffic_type
-  flow_log_max_aggregation_interval    = local.vpc_config.flow_log_max_aggregation_interval
+  # ---- Flow logs ----------------------------------------------------------
+  enable_flow_log                                 = var.enable_flow_logs
+  create_flow_log_cloudwatch_log_group            = var.enable_flow_logs
+  create_flow_log_cloudwatch_iam_role             = var.enable_flow_logs
+  flow_log_traffic_type                           = var.flow_log_traffic_type
+  flow_log_destination_type                       = "cloud-watch-logs"
+  flow_log_max_aggregation_interval               = 60
+  flow_log_cloudwatch_log_group_retention_in_days = var.flow_log_retention_days
+  flow_log_cloudwatch_log_group_kms_key_id        = var.flow_log_kms_key_arn
 
-  # full upstream surface
-  amazon_side_asn                                                   = local.vpc_config.amazon_side_asn
-  create_database_internet_gateway_route                            = local.vpc_config.create_database_internet_gateway_route
-  create_database_nat_gateway_route                                 = local.vpc_config.create_database_nat_gateway_route
-  create_egress_only_igw                                            = local.vpc_config.create_egress_only_igw
-  create_elasticache_subnet_group                                   = local.vpc_config.create_elasticache_subnet_group
-  create_elasticache_subnet_route_table                             = local.vpc_config.create_elasticache_subnet_route_table
-  create_igw                                                        = local.vpc_config.create_igw
-  create_multiple_intra_route_tables                                = local.vpc_config.create_multiple_intra_route_tables
-  create_multiple_public_route_tables                               = local.vpc_config.create_multiple_public_route_tables
-  create_redshift_subnet_group                                      = local.vpc_config.create_redshift_subnet_group
-  create_redshift_subnet_route_table                                = local.vpc_config.create_redshift_subnet_route_table
-  create_vpc                                                        = local.vpc_config.create_vpc
-  customer_gateway_tags                                             = local.vpc_config.customer_gateway_tags
-  customer_gateways                                                 = local.vpc_config.customer_gateways
-  customer_owned_ipv4_pool                                          = local.vpc_config.customer_owned_ipv4_pool
-  database_acl_tags                                                 = local.vpc_config.database_acl_tags
-  database_dedicated_network_acl                                    = local.vpc_config.database_dedicated_network_acl
-  database_route_table_tags                                         = local.vpc_config.database_route_table_tags
-  database_subnet_assign_ipv6_address_on_creation                   = local.vpc_config.database_subnet_assign_ipv6_address_on_creation
-  database_subnet_enable_dns64                                      = local.vpc_config.database_subnet_enable_dns64
-  database_subnet_enable_resource_name_dns_a_record_on_launch       = local.vpc_config.database_subnet_enable_resource_name_dns_a_record_on_launch
-  database_subnet_enable_resource_name_dns_aaaa_record_on_launch    = local.vpc_config.database_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  database_subnet_group_name                                        = local.vpc_config.database_subnet_group_name
-  database_subnet_group_tags                                        = local.vpc_config.database_subnet_group_tags
-  database_subnet_ipv6_native                                       = local.vpc_config.database_subnet_ipv6_native
-  database_subnet_ipv6_prefixes                                     = local.vpc_config.database_subnet_ipv6_prefixes
-  database_subnet_names                                             = local.vpc_config.database_subnet_names
-  database_subnet_private_dns_hostname_type_on_launch               = local.vpc_config.database_subnet_private_dns_hostname_type_on_launch
-  database_subnet_suffix                                            = local.vpc_config.database_subnet_suffix
-  default_network_acl_name                                          = local.vpc_config.default_network_acl_name
-  default_network_acl_tags                                          = local.vpc_config.default_network_acl_tags
-  default_route_table_name                                          = local.vpc_config.default_route_table_name
-  default_route_table_propagating_vgws                              = local.vpc_config.default_route_table_propagating_vgws
-  default_route_table_routes                                        = local.vpc_config.default_route_table_routes
-  default_route_table_tags                                          = local.vpc_config.default_route_table_tags
-  default_security_group_egress                                     = local.vpc_config.default_security_group_egress
-  default_security_group_ingress                                    = local.vpc_config.default_security_group_ingress
-  default_security_group_name                                       = local.vpc_config.default_security_group_name
-  default_security_group_tags                                       = local.vpc_config.default_security_group_tags
-  default_vpc_enable_dns_hostnames                                  = local.vpc_config.default_vpc_enable_dns_hostnames
-  default_vpc_enable_dns_support                                    = local.vpc_config.default_vpc_enable_dns_support
-  default_vpc_name                                                  = local.vpc_config.default_vpc_name
-  default_vpc_tags                                                  = local.vpc_config.default_vpc_tags
-  dhcp_options_domain_name                                          = local.vpc_config.dhcp_options_domain_name
-  dhcp_options_ipv6_address_preferred_lease_time                    = local.vpc_config.dhcp_options_ipv6_address_preferred_lease_time
-  dhcp_options_netbios_name_servers                                 = local.vpc_config.dhcp_options_netbios_name_servers
-  dhcp_options_netbios_node_type                                    = local.vpc_config.dhcp_options_netbios_node_type
-  dhcp_options_ntp_servers                                          = local.vpc_config.dhcp_options_ntp_servers
-  dhcp_options_tags                                                 = local.vpc_config.dhcp_options_tags
-  elasticache_acl_tags                                              = local.vpc_config.elasticache_acl_tags
-  elasticache_dedicated_network_acl                                 = local.vpc_config.elasticache_dedicated_network_acl
-  elasticache_route_table_tags                                      = local.vpc_config.elasticache_route_table_tags
-  elasticache_subnet_assign_ipv6_address_on_creation                = local.vpc_config.elasticache_subnet_assign_ipv6_address_on_creation
-  elasticache_subnet_enable_dns64                                   = local.vpc_config.elasticache_subnet_enable_dns64
-  elasticache_subnet_enable_resource_name_dns_a_record_on_launch    = local.vpc_config.elasticache_subnet_enable_resource_name_dns_a_record_on_launch
-  elasticache_subnet_enable_resource_name_dns_aaaa_record_on_launch = local.vpc_config.elasticache_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  elasticache_subnet_group_name                                     = local.vpc_config.elasticache_subnet_group_name
-  elasticache_subnet_group_tags                                     = local.vpc_config.elasticache_subnet_group_tags
-  elasticache_subnet_ipv6_native                                    = local.vpc_config.elasticache_subnet_ipv6_native
-  elasticache_subnet_ipv6_prefixes                                  = local.vpc_config.elasticache_subnet_ipv6_prefixes
-  elasticache_subnet_names                                          = local.vpc_config.elasticache_subnet_names
-  elasticache_subnet_private_dns_hostname_type_on_launch            = local.vpc_config.elasticache_subnet_private_dns_hostname_type_on_launch
-  elasticache_subnet_suffix                                         = local.vpc_config.elasticache_subnet_suffix
-  elasticache_subnet_tags                                           = local.vpc_config.elasticache_subnet_tags
-  elasticache_subnets                                               = local.vpc_config.elasticache_subnets
-  enable_dhcp_options                                               = local.vpc_config.enable_dhcp_options
-  enable_ipv6                                                       = local.vpc_config.enable_ipv6
-  enable_network_address_usage_metrics                              = local.vpc_config.enable_network_address_usage_metrics
-  enable_public_redshift                                            = local.vpc_config.enable_public_redshift
-  external_nat_ip_ids                                               = local.vpc_config.external_nat_ip_ids
-  external_nat_ips                                                  = local.vpc_config.external_nat_ips
-  flow_log_cloudwatch_iam_role_arn                                  = local.vpc_config.flow_log_cloudwatch_iam_role_arn
-  flow_log_cloudwatch_log_group_class                               = local.vpc_config.flow_log_cloudwatch_log_group_class
-  flow_log_cloudwatch_log_group_kms_key_id                          = local.vpc_config.flow_log_cloudwatch_log_group_kms_key_id
-  flow_log_cloudwatch_log_group_name_prefix                         = local.vpc_config.flow_log_cloudwatch_log_group_name_prefix
-  flow_log_cloudwatch_log_group_name_suffix                         = local.vpc_config.flow_log_cloudwatch_log_group_name_suffix
-  flow_log_cloudwatch_log_group_retention_in_days                   = local.vpc_config.flow_log_cloudwatch_log_group_retention_in_days
-  flow_log_cloudwatch_log_group_skip_destroy                        = local.vpc_config.flow_log_cloudwatch_log_group_skip_destroy
-  flow_log_deliver_cross_account_role                               = local.vpc_config.flow_log_deliver_cross_account_role
-  flow_log_destination_arn                                          = local.vpc_config.flow_log_destination_arn
-  flow_log_destination_type                                         = local.vpc_config.flow_log_destination_type
-  flow_log_file_format                                              = local.vpc_config.flow_log_file_format
-  flow_log_hive_compatible_partitions                               = local.vpc_config.flow_log_hive_compatible_partitions
-  flow_log_log_format                                               = local.vpc_config.flow_log_log_format
-  flow_log_per_hour_partition                                       = local.vpc_config.flow_log_per_hour_partition
-  igw_tags                                                          = local.vpc_config.igw_tags
-  instance_tenancy                                                  = local.vpc_config.instance_tenancy
-  intra_acl_tags                                                    = local.vpc_config.intra_acl_tags
-  intra_dedicated_network_acl                                       = local.vpc_config.intra_dedicated_network_acl
-  intra_route_table_tags                                            = local.vpc_config.intra_route_table_tags
-  intra_subnet_assign_ipv6_address_on_creation                      = local.vpc_config.intra_subnet_assign_ipv6_address_on_creation
-  intra_subnet_enable_dns64                                         = local.vpc_config.intra_subnet_enable_dns64
-  intra_subnet_enable_resource_name_dns_a_record_on_launch          = local.vpc_config.intra_subnet_enable_resource_name_dns_a_record_on_launch
-  intra_subnet_enable_resource_name_dns_aaaa_record_on_launch       = local.vpc_config.intra_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  intra_subnet_ipv6_native                                          = local.vpc_config.intra_subnet_ipv6_native
-  intra_subnet_ipv6_prefixes                                        = local.vpc_config.intra_subnet_ipv6_prefixes
-  intra_subnet_names                                                = local.vpc_config.intra_subnet_names
-  intra_subnet_private_dns_hostname_type_on_launch                  = local.vpc_config.intra_subnet_private_dns_hostname_type_on_launch
-  intra_subnet_suffix                                               = local.vpc_config.intra_subnet_suffix
-  ipv4_ipam_pool_id                                                 = local.vpc_config.ipv4_ipam_pool_id
-  ipv4_netmask_length                                               = local.vpc_config.ipv4_netmask_length
-  ipv6_cidr                                                         = local.vpc_config.ipv6_cidr
-  ipv6_cidr_block_network_border_group                              = local.vpc_config.ipv6_cidr_block_network_border_group
-  ipv6_ipam_pool_id                                                 = local.vpc_config.ipv6_ipam_pool_id
-  ipv6_netmask_length                                               = local.vpc_config.ipv6_netmask_length
-  manage_default_network_acl                                        = local.vpc_config.manage_default_network_acl
-  manage_default_route_table                                        = local.vpc_config.manage_default_route_table
-  manage_default_security_group                                     = local.vpc_config.manage_default_security_group
-  manage_default_vpc                                                = local.vpc_config.manage_default_vpc
-  map_customer_owned_ip_on_launch                                   = local.vpc_config.map_customer_owned_ip_on_launch
-  map_public_ip_on_launch                                           = local.vpc_config.map_public_ip_on_launch
-  nat_eip_tags                                                      = local.vpc_config.nat_eip_tags
-  nat_gateway_destination_cidr_block                                = local.vpc_config.nat_gateway_destination_cidr_block
-  nat_gateway_tags                                                  = local.vpc_config.nat_gateway_tags
-  outpost_acl_tags                                                  = local.vpc_config.outpost_acl_tags
-  outpost_arn                                                       = local.vpc_config.outpost_arn
-  outpost_az                                                        = local.vpc_config.outpost_az
-  outpost_dedicated_network_acl                                     = local.vpc_config.outpost_dedicated_network_acl
-  outpost_subnet_assign_ipv6_address_on_creation                    = local.vpc_config.outpost_subnet_assign_ipv6_address_on_creation
-  outpost_subnet_enable_dns64                                       = local.vpc_config.outpost_subnet_enable_dns64
-  outpost_subnet_enable_resource_name_dns_a_record_on_launch        = local.vpc_config.outpost_subnet_enable_resource_name_dns_a_record_on_launch
-  outpost_subnet_enable_resource_name_dns_aaaa_record_on_launch     = local.vpc_config.outpost_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  outpost_subnet_ipv6_native                                        = local.vpc_config.outpost_subnet_ipv6_native
-  outpost_subnet_ipv6_prefixes                                      = local.vpc_config.outpost_subnet_ipv6_prefixes
-  outpost_subnet_names                                              = local.vpc_config.outpost_subnet_names
-  outpost_subnet_private_dns_hostname_type_on_launch                = local.vpc_config.outpost_subnet_private_dns_hostname_type_on_launch
-  outpost_subnet_suffix                                             = local.vpc_config.outpost_subnet_suffix
-  outpost_subnet_tags                                               = local.vpc_config.outpost_subnet_tags
-  outpost_subnets                                                   = local.vpc_config.outpost_subnets
-  private_acl_tags                                                  = local.vpc_config.private_acl_tags
-  private_dedicated_network_acl                                     = local.vpc_config.private_dedicated_network_acl
-  private_route_table_tags                                          = local.vpc_config.private_route_table_tags
-  private_subnet_assign_ipv6_address_on_creation                    = local.vpc_config.private_subnet_assign_ipv6_address_on_creation
-  private_subnet_enable_dns64                                       = local.vpc_config.private_subnet_enable_dns64
-  private_subnet_enable_resource_name_dns_a_record_on_launch        = local.vpc_config.private_subnet_enable_resource_name_dns_a_record_on_launch
-  private_subnet_enable_resource_name_dns_aaaa_record_on_launch     = local.vpc_config.private_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  private_subnet_ipv6_native                                        = local.vpc_config.private_subnet_ipv6_native
-  private_subnet_ipv6_prefixes                                      = local.vpc_config.private_subnet_ipv6_prefixes
-  private_subnet_names                                              = local.vpc_config.private_subnet_names
-  private_subnet_private_dns_hostname_type_on_launch                = local.vpc_config.private_subnet_private_dns_hostname_type_on_launch
-  private_subnet_suffix                                             = local.vpc_config.private_subnet_suffix
-  private_subnet_tags_per_az                                        = local.vpc_config.private_subnet_tags_per_az
-  propagate_intra_route_tables_vgw                                  = local.vpc_config.propagate_intra_route_tables_vgw
-  propagate_private_route_tables_vgw                                = local.vpc_config.propagate_private_route_tables_vgw
-  propagate_public_route_tables_vgw                                 = local.vpc_config.propagate_public_route_tables_vgw
-  public_acl_tags                                                   = local.vpc_config.public_acl_tags
-  public_dedicated_network_acl                                      = local.vpc_config.public_dedicated_network_acl
-  public_route_table_tags                                           = local.vpc_config.public_route_table_tags
-  public_subnet_assign_ipv6_address_on_creation                     = local.vpc_config.public_subnet_assign_ipv6_address_on_creation
-  public_subnet_enable_dns64                                        = local.vpc_config.public_subnet_enable_dns64
-  public_subnet_enable_resource_name_dns_a_record_on_launch         = local.vpc_config.public_subnet_enable_resource_name_dns_a_record_on_launch
-  public_subnet_enable_resource_name_dns_aaaa_record_on_launch      = local.vpc_config.public_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  public_subnet_ipv6_native                                         = local.vpc_config.public_subnet_ipv6_native
-  public_subnet_ipv6_prefixes                                       = local.vpc_config.public_subnet_ipv6_prefixes
-  public_subnet_names                                               = local.vpc_config.public_subnet_names
-  public_subnet_private_dns_hostname_type_on_launch                 = local.vpc_config.public_subnet_private_dns_hostname_type_on_launch
-  public_subnet_suffix                                              = local.vpc_config.public_subnet_suffix
-  public_subnet_tags_per_az                                         = local.vpc_config.public_subnet_tags_per_az
-  putin_khuylo                                                      = local.vpc_config.putin_khuylo
-  redshift_acl_tags                                                 = local.vpc_config.redshift_acl_tags
-  redshift_dedicated_network_acl                                    = local.vpc_config.redshift_dedicated_network_acl
-  redshift_route_table_tags                                         = local.vpc_config.redshift_route_table_tags
-  redshift_subnet_assign_ipv6_address_on_creation                   = local.vpc_config.redshift_subnet_assign_ipv6_address_on_creation
-  redshift_subnet_enable_dns64                                      = local.vpc_config.redshift_subnet_enable_dns64
-  redshift_subnet_enable_resource_name_dns_a_record_on_launch       = local.vpc_config.redshift_subnet_enable_resource_name_dns_a_record_on_launch
-  redshift_subnet_enable_resource_name_dns_aaaa_record_on_launch    = local.vpc_config.redshift_subnet_enable_resource_name_dns_aaaa_record_on_launch
-  redshift_subnet_group_name                                        = local.vpc_config.redshift_subnet_group_name
-  redshift_subnet_group_tags                                        = local.vpc_config.redshift_subnet_group_tags
-  redshift_subnet_ipv6_native                                       = local.vpc_config.redshift_subnet_ipv6_native
-  redshift_subnet_ipv6_prefixes                                     = local.vpc_config.redshift_subnet_ipv6_prefixes
-  redshift_subnet_names                                             = local.vpc_config.redshift_subnet_names
-  redshift_subnet_private_dns_hostname_type_on_launch               = local.vpc_config.redshift_subnet_private_dns_hostname_type_on_launch
-  redshift_subnet_suffix                                            = local.vpc_config.redshift_subnet_suffix
-  redshift_subnet_tags                                              = local.vpc_config.redshift_subnet_tags
-  redshift_subnets                                                  = local.vpc_config.redshift_subnets
-  reuse_nat_ips                                                     = local.vpc_config.reuse_nat_ips
-  secondary_cidr_blocks                                             = local.vpc_config.secondary_cidr_blocks
-  use_ipam_pool                                                     = local.vpc_config.use_ipam_pool
-  vpc_flow_log_iam_policy_name                                      = local.vpc_config.vpc_flow_log_iam_policy_name
-  vpc_flow_log_iam_policy_use_name_prefix                           = local.vpc_config.vpc_flow_log_iam_policy_use_name_prefix
-  vpc_flow_log_iam_role_name                                        = local.vpc_config.vpc_flow_log_iam_role_name
-  vpc_flow_log_iam_role_use_name_prefix                             = local.vpc_config.vpc_flow_log_iam_role_use_name_prefix
-  vpc_flow_log_permissions_boundary                                 = local.vpc_config.vpc_flow_log_permissions_boundary
-  vpc_flow_log_tags                                                 = local.vpc_config.vpc_flow_log_tags
-  vpc_tags                                                          = local.vpc_config.vpc_tags
-  vpn_gateway_az                                                    = local.vpc_config.vpn_gateway_az
-  vpn_gateway_id                                                    = local.vpc_config.vpn_gateway_id
-  vpn_gateway_tags                                                  = local.vpc_config.vpn_gateway_tags
+  # ---- Tags ---------------------------------------------------------------
+  public_subnet_tags   = local.public_tags
+  private_subnet_tags  = local.private_tags
+  database_subnet_tags = local.database_tags
 
-  tags = local.tags
+  tags = var.tags
+}
+
+# ---------------------------------------------------------------------------
+# ElastiCache subnet group
+#
+# Built here rather than by the elasticache module, and over the database
+# subnets, so a cache is placed in the same no-internet-route tier as RDS. The
+# upstream module's own elasticache subnet group wants dedicated elasticache_subnets;
+# reusing the database tier keeps the address plan to three tiers.
+# ---------------------------------------------------------------------------
+
+resource "aws_elasticache_subnet_group" "this" {
+  count = var.create_elasticache_subnet_group ? 1 : 0
+
+  name        = "${var.name}-cache"
+  description = "ElastiCache subnet group for ${var.name} (database tier, no internet route)"
+  subnet_ids  = module.vpc.database_subnets
+
+  tags = merge(var.tags, { Name = "${var.name}-cache" })
+}
+
+# ---------------------------------------------------------------------------
+# Gateway VPC endpoints
+#
+# These are free and they keep S3/DynamoDB traffic off the NAT gateway, which is
+# usually the single largest line item in a VPC bill. Attached to the private
+# and database route tables — the public tier already has a direct path.
+# ---------------------------------------------------------------------------
+
+data "aws_region" "current" {}
+
+resource "aws_vpc_endpoint" "s3" {
+  count = var.enable_s3_gateway_endpoint ? 1 : 0
+
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  vpc_endpoint_type = "Gateway"
+
+  route_table_ids = concat(
+    module.vpc.private_route_table_ids,
+    module.vpc.database_route_table_ids,
+  )
+
+  tags = merge(var.tags, { Name = "${var.name}-s3-endpoint" })
+}
+
+resource "aws_vpc_endpoint" "dynamodb" {
+  count = var.enable_dynamodb_gateway_endpoint ? 1 : 0
+
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+
+  route_table_ids = concat(
+    module.vpc.private_route_table_ids,
+    module.vpc.database_route_table_ids,
+  )
+
+  tags = merge(var.tags, { Name = "${var.name}-dynamodb-endpoint" })
+}
+
+# ---------------------------------------------------------------------------
+# Interface VPC endpoints
+#
+# Billed per hour per AZ plus data, so this is opt-in and explicit. The common
+# reason to enable them is a private EKS cluster or a NAT-less private subnet
+# that still has to reach ECR, CloudWatch Logs and SSM.
+# ---------------------------------------------------------------------------
+
+locals {
+  create_endpoint_sg = length(var.interface_endpoints) > 0 && length(var.interface_endpoint_security_group_ids) == 0
+
+  endpoint_security_group_ids = local.create_endpoint_sg ? [aws_security_group.endpoints[0].id] : var.interface_endpoint_security_group_ids
+}
+
+resource "aws_security_group" "endpoints" {
+  count = local.create_endpoint_sg ? 1 : 0
+
+  name        = "${var.name}-vpc-endpoints"
+  description = "HTTPS from inside the VPC to the interface VPC endpoints"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = merge(var.tags, { Name = "${var.name}-vpc-endpoints" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "endpoints_https" {
+  count = local.create_endpoint_sg ? 1 : 0
+
+  security_group_id = aws_security_group.endpoints[0].id
+  cidr_ipv4         = module.vpc.vpc_cidr_block
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "HTTPS from inside the VPC"
+
+  tags = merge(var.tags, { Name = "${var.name}-vpc-endpoints-https" })
+}
+
+resource "aws_vpc_endpoint" "interface" {
+  for_each = toset(var.interface_endpoints)
+
+  vpc_id              = module.vpc.vpc_id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = module.vpc.private_subnets
+  security_group_ids  = local.endpoint_security_group_ids
+  private_dns_enabled = true
+
+  tags = merge(var.tags, { Name = "${var.name}-${replace(each.value, ".", "-")}-endpoint" })
 }

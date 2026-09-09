@@ -1,105 +1,59 @@
 # vpc
 
-VPC, subnets, routing, NAT gateways and flow logs.
-
-Wraps `terraform-aws-modules/vpc/aws` (5.13.0). Configuration comes from the `vpc:` block of a YAML file.
-
 ## Usage
 
 ```hcl
 module "vpc" {
-  source = "../../modules/vpc"
+  source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=v1.0.0"
 
-  config_file = "config.yml"
+  name       = local.name_prefix
+  cidr_block = "10.0.0.0/16"
 
-  global_config = {
-    environment = "dev"
-    region      = "ap-southeast-1"
-    project     = "SM-Platform"
-  }
+  tags       = local.tags
 }
 ```
 
-```yaml
-# config.yml
-app_name: "base"
-service_type: "infra"
+Every input not listed above has a default — 23 of them. See `variables.tf`.
 
-vpc:
-  enabled: false
-  cidr: "10.10.0.0/16"
-  azs: ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
-  public_subnets:   ["10.10.0.0/20",   "10.10.16.0/20",  "10.10.32.0/20"]
-  private_subnets:  ["10.10.64.0/19",  "10.10.96.0/19",  "10.10.128.0/19"]
-  database_subnets: ["10.10.160.0/24", "10.10.161.0/24", "10.10.162.0/24"]
-  intra_subnets: []                   # no route to the internet at all
-  enable_nat_gateway: true
-  single_nat_gateway: true            # prod: false, with one_nat_gateway_per_az true
-  one_nat_gateway_per_az: false
-  enable_dns_hostnames: true
-  enable_dns_support: true
-  enable_vpn_gateway: false
-  create_database_subnet_group: true
-  create_database_subnet_route_table: false
-  enable_flow_log: true
-  flow_log_traffic_type: "REJECT"     # ALL | ACCEPT | REJECT
-  flow_log_max_aggregation_interval: 60
-  public_subnet_tags:   { Tier: "Public" }
-  private_subnet_tags:  { Tier: "Private" }
-  database_subnet_tags: { Tier: "Data" }
-  intra_subnet_tags:    {}
+## Required inputs
 
-# 188 further upstream arguments are listed, grouped and commented out,
-# in examples/module-config/vpc.yml
-```
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0, < 6.0 |
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| aws | >= 5.0, < 6.0 |
-
-Configured by the caller. This module declares no `provider` and no `backend`.
-
-## Modules
-
-| Name | Source | Version |
-|------|--------|---------|
-| `aws` | `terraform-aws-modules/vpc/aws` | `5.13.0` |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `global_config` | Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod. | `object` | n/a | **yes** |
-| `config_file` | Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory. | `string` | `"config.yml"` | no |
-| `manual_config` | Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly. | `any` | `{}` | no |
-| `tags` | Extra tags, merged over the ones derived from `global_config`. | `map(string)` | `{}` | no |
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Name prefix for the VPC and every subnet, route table and gateway inside it. Conventionally "<project>-<environment>". |
+| `cidr_block` | `string` | IPv4 CIDR for the VPC. A /16 gives the default subnet layout room to grow; anything smaller than /20 will not fit three tiers across three AZs. |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `vpc_id` | The ID of the VPC |
-| `vpc_cidr_block` | The CIDR block of the VPC |
-| `private_subnets` | List of IDs of private subnets |
-| `public_subnets` | List of IDs of public subnets |
-| `private_subnet_arns` | List of ARNs of private subnets |
-| `public_subnet_arns` | List of ARNs of public subnets |
-| `nat_public_ips` | List of public Elastic IPs created for AWS NAT Gateway(s). Useful for whitelisting IPs in external firewalls. |
-| `private_route_table_ids` | List of IDs of private route tables |
-| `public_route_table_ids` | List of IDs of public route tables |
-| `default_security_group_id` | The ID of the security group created by default on VPC creation |
-| `database_subnets` | List of IDs of database subnets |
-| `database_subnet_group_name` | Name of the RDS subnet group (empty when not created) |
-| `intra_subnets` | List of IDs of intra subnets (no internet access) |
-| `vpc_flow_log_id` | ID of the VPC Flow Log (null when flow log disabled) |
-| `vpc_flow_log_cloudwatch_iam_role_arn` | ARN of the CloudWatch IAM role for VPC Flow Logs |
-| `azs` | List of Availability Zones used |
+|---|---|
+| `vpc_id` | VPC ID. Consumed by security-groups, alb, eks, rds, elasticache and lambda. |
+| `vpc_arn` | VPC ARN. |
+| `vpc_cidr_block` | VPC IPv4 CIDR. Used for intra-VPC security group rules where an SG reference is not possible. |
+| `azs` | Availability zones the subnets were spread across, in order. |
+| `public_subnet_ids` | Public subnet IDs, one per AZ. Internet-facing load balancers and NAT gateways only — never an instance or a database. |
+| `private_subnet_ids` | Private application subnet IDs, one per AZ. EKS nodes, EC2 instances and Lambda ENIs live here. Egress via NAT, no inbound route from the internet. |
+| `database_subnet_ids` | Database subnet IDs, one per AZ. No internet route in either direction. RDS and ElastiCache only. |
+| `public_subnet_cidrs` | Public subnet CIDRs. |
+| `private_subnet_cidrs` | Private application subnet CIDRs. |
+| `database_subnet_cidrs` | Database subnet CIDRs. |
+| `database_subnet_group_name` | RDS DB subnet group name. Passing this to the RDS module is what structurally prevents a database from being placed in a public subnet. |
+| `elasticache_subnet_group_name` | ElastiCache subnet group name, or null when create_elasticache_subnet_group is false. |
+| `internet_gateway_id` | Internet gateway ID. |
+| `nat_gateway_ids` | NAT gateway IDs. Empty when enable_nat_gateway is false. |
+| `nat_public_ips` | Elastic IPs of the NAT gateways. These are the source addresses partners must allowlist for outbound calls from private workloads. |
+| `public_route_table_ids` | Public route table IDs. |
+| `private_route_table_ids` | Private route table IDs. |
+| `database_route_table_ids` | Database route table IDs. |
+| `default_security_group_id` | The VPC's default security group. This module strips all of its rules; nothing should ever be attached to it. |
+| `flow_log_id` | VPC flow log ID, or null when flow logs are disabled. |
+| `flow_log_destination_arn` | ARN of the destination flow logs are delivered to — the CloudWatch log group ARN in the default configuration. Upstream exposes no separate log group name output. |
+| `flow_log_cloudwatch_iam_role_arn` | Role the flow log service assumes to write to CloudWatch Logs. |
+| `s3_gateway_endpoint_id` | S3 gateway VPC endpoint ID, or null when disabled. |
+| `dynamodb_gateway_endpoint_id` | DynamoDB gateway VPC endpoint ID, or null when disabled. |
+| `interface_endpoint_ids` | Map of service name to interface VPC endpoint ID. |
+| `interface_endpoint_security_group_id` | Security group this module created for the interface endpoints, or null when none was needed. |
+
+## Notes
+
+- Pin a tag in `source`, never a branch.
+- A worked, wired-together example is in [`examples/complete`](../../examples/complete).

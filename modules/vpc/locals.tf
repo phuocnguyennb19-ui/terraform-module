@@ -1,245 +1,58 @@
+data "aws_availability_zones" "available" {
+  state = "available"
+
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
+
 locals {
-  config_local = merge(
-    try(yamldecode(file("${path.cwd}/${var.config_file}")), {}),
-    var.manual_config
+  azs = var.azs != null ? var.azs : slice(data.aws_availability_zones.available.names, 0, var.az_count)
+
+  az_count = length(local.azs)
+
+  # Default subnet layout, derived from cidr_block so a caller only has to
+  # supply one CIDR. For a /16 and three AZs this produces:
+  #
+  #   private (app)   10.x.0.0/20   10.x.16.0/20   10.x.32.0/20   <- large, pods and instances live here
+  #   public          10.x.240.0/24 10.x.241.0/24  10.x.242.0/24  <- small, only load balancers and NAT
+  #   database        10.x.250.0/24 10.x.251.0/24  10.x.252.0/24  <- small, no internet route at all
+  #
+  # The application tier gets the /20 blocks because it is the only tier whose
+  # address consumption is unpredictable — an EKS node group with the VPC CNI
+  # burns one VPC address per pod. Public and database subnets hold a countable
+  # number of ENIs, so /24 is generous.
+  #
+  # The high indices keep the public and database ranges out of the way of the
+  # application /20s, leaving 10.x.48.0 - 10.x.239.255 free for future tiers.
+  derived_private_subnet_cidrs  = [for i in range(local.az_count) : cidrsubnet(var.cidr_block, 4, i)]
+  derived_public_subnet_cidrs   = [for i in range(local.az_count) : cidrsubnet(var.cidr_block, 8, 240 + i)]
+  derived_database_subnet_cidrs = [for i in range(local.az_count) : cidrsubnet(var.cidr_block, 8, 250 + i)]
+
+  private_subnet_cidrs  = var.private_subnet_cidrs != null ? var.private_subnet_cidrs : local.derived_private_subnet_cidrs
+  public_subnet_cidrs   = var.public_subnet_cidrs != null ? var.public_subnet_cidrs : local.derived_public_subnet_cidrs
+  database_subnet_cidrs = var.database_subnet_cidrs != null ? var.database_subnet_cidrs : local.derived_database_subnet_cidrs
+
+  # Discovery tags. The AWS Load Balancer Controller looks for kubernetes.io/role/elb
+  # on public subnets and kubernetes.io/role/internal-elb on private ones; both it
+  # and the Cluster Autoscaler look for kubernetes.io/cluster/<name>.
+  eks_shared_tags = { for c in var.eks_cluster_names : "kubernetes.io/cluster/${c}" => "shared" }
+
+  public_tags = merge(
+    { Tier = "public" },
+    length(var.eks_cluster_names) > 0 ? merge(local.eks_shared_tags, { "kubernetes.io/role/elb" = "1" }) : {},
+    var.public_subnet_tags,
   )
 
-  env          = lookup(var.global_config, "environment", "dev")
-  region       = lookup(var.global_config, "region", "ap-southeast-1")
-  project      = lookup(var.global_config, "project", "core")
-  app_name     = lookup(local.config_local, "app_name", null)
-  service_type = lookup(local.config_local, "service_type", "infra")
+  private_tags = merge(
+    { Tier = "private-app" },
+    length(var.eks_cluster_names) > 0 ? merge(local.eks_shared_tags, { "kubernetes.io/role/internal-elb" = "1" }) : {},
+    var.private_subnet_tags,
+  )
 
-  name_prefix = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
-
-  raw_vpc_cfg = try(local.config_local.vpc, {})
-
-  vpc_config = {
-    name                               = "${local.name_prefix}-vpc"
-    cidr                               = try(local.raw_vpc_cfg.cidr, "10.0.0.0/16")
-    azs                                = try(local.raw_vpc_cfg.azs, [for s in ["a", "b", "c"] : "${local.region}${s}"])
-    public_subnets                     = try(local.raw_vpc_cfg.public_subnets, [])
-    private_subnets                    = try(local.raw_vpc_cfg.private_subnets, [])
-    database_subnets                   = try(local.raw_vpc_cfg.database_subnets, [])
-    intra_subnets                      = try(local.raw_vpc_cfg.intra_subnets, [])
-    enable_nat_gateway                 = try(local.raw_vpc_cfg.enable_nat_gateway, true)
-    single_nat_gateway                 = try(local.raw_vpc_cfg.single_nat_gateway, local.env != "prod")
-    one_nat_gateway_per_az             = try(local.raw_vpc_cfg.one_nat_gateway_per_az, local.env == "prod")
-    enable_dns_hostnames               = try(local.raw_vpc_cfg.enable_dns_hostnames, true)
-    enable_dns_support                 = try(local.raw_vpc_cfg.enable_dns_support, true)
-    enable_vpn_gateway                 = try(local.raw_vpc_cfg.enable_vpn_gateway, false)
-    public_subnet_tags                 = try(local.raw_vpc_cfg.public_subnet_tags, {})
-    private_subnet_tags                = try(local.raw_vpc_cfg.private_subnet_tags, {})
-    database_subnet_tags               = try(local.raw_vpc_cfg.database_subnet_tags, {})
-    intra_subnet_tags                  = try(local.raw_vpc_cfg.intra_subnet_tags, {})
-    create_database_subnet_group       = try(local.raw_vpc_cfg.create_database_subnet_group, length(try(local.raw_vpc_cfg.database_subnets, [])) > 0)
-    create_database_subnet_route_table = try(local.raw_vpc_cfg.create_database_subnet_route_table, false)
-    enable_flow_log                    = try(local.raw_vpc_cfg.enable_flow_log, true)
-    flow_log_traffic_type              = try(local.raw_vpc_cfg.flow_log_traffic_type, "REJECT")
-    flow_log_max_aggregation_interval  = try(local.raw_vpc_cfg.flow_log_max_aggregation_interval, 60)
-
-    # full upstream surface
-    # Every remaining terraform-aws-vpc argument that has a simple literal
-    # default, mapped with that same default as its fallback.
-    amazon_side_asn                                                   = try(local.raw_vpc_cfg.amazon_side_asn, "64512")
-    create_database_internet_gateway_route                            = try(local.raw_vpc_cfg.create_database_internet_gateway_route, false)
-    create_database_nat_gateway_route                                 = try(local.raw_vpc_cfg.create_database_nat_gateway_route, false)
-    create_egress_only_igw                                            = try(local.raw_vpc_cfg.create_egress_only_igw, true)
-    create_elasticache_subnet_group                                   = try(local.raw_vpc_cfg.create_elasticache_subnet_group, true)
-    create_elasticache_subnet_route_table                             = try(local.raw_vpc_cfg.create_elasticache_subnet_route_table, false)
-    create_igw                                                        = try(local.raw_vpc_cfg.create_igw, true)
-    create_multiple_intra_route_tables                                = try(local.raw_vpc_cfg.create_multiple_intra_route_tables, false)
-    create_multiple_public_route_tables                               = try(local.raw_vpc_cfg.create_multiple_public_route_tables, false)
-    create_redshift_subnet_group                                      = try(local.raw_vpc_cfg.create_redshift_subnet_group, true)
-    create_redshift_subnet_route_table                                = try(local.raw_vpc_cfg.create_redshift_subnet_route_table, false)
-    create_vpc                                                        = try(local.raw_vpc_cfg.create_vpc, true)
-    customer_gateway_tags                                             = try(local.raw_vpc_cfg.customer_gateway_tags, {})
-    customer_gateways                                                 = try(local.raw_vpc_cfg.customer_gateways, {})
-    customer_owned_ipv4_pool                                          = try(local.raw_vpc_cfg.customer_owned_ipv4_pool, null)
-    database_acl_tags                                                 = try(local.raw_vpc_cfg.database_acl_tags, {})
-    database_dedicated_network_acl                                    = try(local.raw_vpc_cfg.database_dedicated_network_acl, false)
-    database_route_table_tags                                         = try(local.raw_vpc_cfg.database_route_table_tags, {})
-    database_subnet_assign_ipv6_address_on_creation                   = try(local.raw_vpc_cfg.database_subnet_assign_ipv6_address_on_creation, false)
-    database_subnet_enable_dns64                                      = try(local.raw_vpc_cfg.database_subnet_enable_dns64, true)
-    database_subnet_enable_resource_name_dns_a_record_on_launch       = try(local.raw_vpc_cfg.database_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    database_subnet_enable_resource_name_dns_aaaa_record_on_launch    = try(local.raw_vpc_cfg.database_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    database_subnet_group_name                                        = try(local.raw_vpc_cfg.database_subnet_group_name, null)
-    database_subnet_group_tags                                        = try(local.raw_vpc_cfg.database_subnet_group_tags, {})
-    database_subnet_ipv6_native                                       = try(local.raw_vpc_cfg.database_subnet_ipv6_native, false)
-    database_subnet_ipv6_prefixes                                     = try(local.raw_vpc_cfg.database_subnet_ipv6_prefixes, [])
-    database_subnet_names                                             = try(local.raw_vpc_cfg.database_subnet_names, [])
-    database_subnet_private_dns_hostname_type_on_launch               = try(local.raw_vpc_cfg.database_subnet_private_dns_hostname_type_on_launch, null)
-    database_subnet_suffix                                            = try(local.raw_vpc_cfg.database_subnet_suffix, "db")
-    default_network_acl_name                                          = try(local.raw_vpc_cfg.default_network_acl_name, null)
-    default_network_acl_tags                                          = try(local.raw_vpc_cfg.default_network_acl_tags, {})
-    default_route_table_name                                          = try(local.raw_vpc_cfg.default_route_table_name, null)
-    default_route_table_propagating_vgws                              = try(local.raw_vpc_cfg.default_route_table_propagating_vgws, [])
-    default_route_table_routes                                        = try(local.raw_vpc_cfg.default_route_table_routes, [])
-    default_route_table_tags                                          = try(local.raw_vpc_cfg.default_route_table_tags, {})
-    default_security_group_egress                                     = try(local.raw_vpc_cfg.default_security_group_egress, [])
-    default_security_group_ingress                                    = try(local.raw_vpc_cfg.default_security_group_ingress, [])
-    default_security_group_name                                       = try(local.raw_vpc_cfg.default_security_group_name, null)
-    default_security_group_tags                                       = try(local.raw_vpc_cfg.default_security_group_tags, {})
-    default_vpc_enable_dns_hostnames                                  = try(local.raw_vpc_cfg.default_vpc_enable_dns_hostnames, true)
-    default_vpc_enable_dns_support                                    = try(local.raw_vpc_cfg.default_vpc_enable_dns_support, true)
-    default_vpc_name                                                  = try(local.raw_vpc_cfg.default_vpc_name, null)
-    default_vpc_tags                                                  = try(local.raw_vpc_cfg.default_vpc_tags, {})
-    dhcp_options_domain_name                                          = try(local.raw_vpc_cfg.dhcp_options_domain_name, "")
-    dhcp_options_ipv6_address_preferred_lease_time                    = try(local.raw_vpc_cfg.dhcp_options_ipv6_address_preferred_lease_time, null)
-    dhcp_options_netbios_name_servers                                 = try(local.raw_vpc_cfg.dhcp_options_netbios_name_servers, [])
-    dhcp_options_netbios_node_type                                    = try(local.raw_vpc_cfg.dhcp_options_netbios_node_type, "")
-    dhcp_options_ntp_servers                                          = try(local.raw_vpc_cfg.dhcp_options_ntp_servers, [])
-    dhcp_options_tags                                                 = try(local.raw_vpc_cfg.dhcp_options_tags, {})
-    elasticache_acl_tags                                              = try(local.raw_vpc_cfg.elasticache_acl_tags, {})
-    elasticache_dedicated_network_acl                                 = try(local.raw_vpc_cfg.elasticache_dedicated_network_acl, false)
-    elasticache_route_table_tags                                      = try(local.raw_vpc_cfg.elasticache_route_table_tags, {})
-    elasticache_subnet_assign_ipv6_address_on_creation                = try(local.raw_vpc_cfg.elasticache_subnet_assign_ipv6_address_on_creation, false)
-    elasticache_subnet_enable_dns64                                   = try(local.raw_vpc_cfg.elasticache_subnet_enable_dns64, true)
-    elasticache_subnet_enable_resource_name_dns_a_record_on_launch    = try(local.raw_vpc_cfg.elasticache_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    elasticache_subnet_enable_resource_name_dns_aaaa_record_on_launch = try(local.raw_vpc_cfg.elasticache_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    elasticache_subnet_group_name                                     = try(local.raw_vpc_cfg.elasticache_subnet_group_name, null)
-    elasticache_subnet_group_tags                                     = try(local.raw_vpc_cfg.elasticache_subnet_group_tags, {})
-    elasticache_subnet_ipv6_native                                    = try(local.raw_vpc_cfg.elasticache_subnet_ipv6_native, false)
-    elasticache_subnet_ipv6_prefixes                                  = try(local.raw_vpc_cfg.elasticache_subnet_ipv6_prefixes, [])
-    elasticache_subnet_names                                          = try(local.raw_vpc_cfg.elasticache_subnet_names, [])
-    elasticache_subnet_private_dns_hostname_type_on_launch            = try(local.raw_vpc_cfg.elasticache_subnet_private_dns_hostname_type_on_launch, null)
-    elasticache_subnet_suffix                                         = try(local.raw_vpc_cfg.elasticache_subnet_suffix, "elasticache")
-    elasticache_subnet_tags                                           = try(local.raw_vpc_cfg.elasticache_subnet_tags, {})
-    elasticache_subnets                                               = try(local.raw_vpc_cfg.elasticache_subnets, [])
-    enable_dhcp_options                                               = try(local.raw_vpc_cfg.enable_dhcp_options, false)
-    enable_ipv6                                                       = try(local.raw_vpc_cfg.enable_ipv6, false)
-    enable_network_address_usage_metrics                              = try(local.raw_vpc_cfg.enable_network_address_usage_metrics, null)
-    enable_public_redshift                                            = try(local.raw_vpc_cfg.enable_public_redshift, false)
-    external_nat_ip_ids                                               = try(local.raw_vpc_cfg.external_nat_ip_ids, [])
-    external_nat_ips                                                  = try(local.raw_vpc_cfg.external_nat_ips, [])
-    flow_log_cloudwatch_iam_role_arn                                  = try(local.raw_vpc_cfg.flow_log_cloudwatch_iam_role_arn, "")
-    flow_log_cloudwatch_log_group_class                               = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_class, null)
-    flow_log_cloudwatch_log_group_kms_key_id                          = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_kms_key_id, null)
-    flow_log_cloudwatch_log_group_name_prefix                         = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_name_prefix, "/aws/vpc-flow-log/")
-    flow_log_cloudwatch_log_group_name_suffix                         = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_name_suffix, "")
-    flow_log_cloudwatch_log_group_retention_in_days                   = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_retention_in_days, null)
-    flow_log_cloudwatch_log_group_skip_destroy                        = try(local.raw_vpc_cfg.flow_log_cloudwatch_log_group_skip_destroy, false)
-    flow_log_deliver_cross_account_role                               = try(local.raw_vpc_cfg.flow_log_deliver_cross_account_role, null)
-    flow_log_destination_arn                                          = try(local.raw_vpc_cfg.flow_log_destination_arn, "")
-    flow_log_destination_type                                         = try(local.raw_vpc_cfg.flow_log_destination_type, "cloud-watch-logs")
-    flow_log_file_format                                              = try(local.raw_vpc_cfg.flow_log_file_format, null)
-    flow_log_hive_compatible_partitions                               = try(local.raw_vpc_cfg.flow_log_hive_compatible_partitions, false)
-    flow_log_log_format                                               = try(local.raw_vpc_cfg.flow_log_log_format, null)
-    flow_log_per_hour_partition                                       = try(local.raw_vpc_cfg.flow_log_per_hour_partition, false)
-    igw_tags                                                          = try(local.raw_vpc_cfg.igw_tags, {})
-    instance_tenancy                                                  = try(local.raw_vpc_cfg.instance_tenancy, "default")
-    intra_acl_tags                                                    = try(local.raw_vpc_cfg.intra_acl_tags, {})
-    intra_dedicated_network_acl                                       = try(local.raw_vpc_cfg.intra_dedicated_network_acl, false)
-    intra_route_table_tags                                            = try(local.raw_vpc_cfg.intra_route_table_tags, {})
-    intra_subnet_assign_ipv6_address_on_creation                      = try(local.raw_vpc_cfg.intra_subnet_assign_ipv6_address_on_creation, false)
-    intra_subnet_enable_dns64                                         = try(local.raw_vpc_cfg.intra_subnet_enable_dns64, true)
-    intra_subnet_enable_resource_name_dns_a_record_on_launch          = try(local.raw_vpc_cfg.intra_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    intra_subnet_enable_resource_name_dns_aaaa_record_on_launch       = try(local.raw_vpc_cfg.intra_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    intra_subnet_ipv6_native                                          = try(local.raw_vpc_cfg.intra_subnet_ipv6_native, false)
-    intra_subnet_ipv6_prefixes                                        = try(local.raw_vpc_cfg.intra_subnet_ipv6_prefixes, [])
-    intra_subnet_names                                                = try(local.raw_vpc_cfg.intra_subnet_names, [])
-    intra_subnet_private_dns_hostname_type_on_launch                  = try(local.raw_vpc_cfg.intra_subnet_private_dns_hostname_type_on_launch, null)
-    intra_subnet_suffix                                               = try(local.raw_vpc_cfg.intra_subnet_suffix, "intra")
-    ipv4_ipam_pool_id                                                 = try(local.raw_vpc_cfg.ipv4_ipam_pool_id, null)
-    ipv4_netmask_length                                               = try(local.raw_vpc_cfg.ipv4_netmask_length, null)
-    ipv6_cidr                                                         = try(local.raw_vpc_cfg.ipv6_cidr, null)
-    ipv6_cidr_block_network_border_group                              = try(local.raw_vpc_cfg.ipv6_cidr_block_network_border_group, null)
-    ipv6_ipam_pool_id                                                 = try(local.raw_vpc_cfg.ipv6_ipam_pool_id, null)
-    ipv6_netmask_length                                               = try(local.raw_vpc_cfg.ipv6_netmask_length, null)
-    manage_default_network_acl                                        = try(local.raw_vpc_cfg.manage_default_network_acl, true)
-    manage_default_route_table                                        = try(local.raw_vpc_cfg.manage_default_route_table, true)
-    manage_default_security_group                                     = try(local.raw_vpc_cfg.manage_default_security_group, true)
-    manage_default_vpc                                                = try(local.raw_vpc_cfg.manage_default_vpc, false)
-    map_customer_owned_ip_on_launch                                   = try(local.raw_vpc_cfg.map_customer_owned_ip_on_launch, false)
-    map_public_ip_on_launch                                           = try(local.raw_vpc_cfg.map_public_ip_on_launch, false)
-    nat_eip_tags                                                      = try(local.raw_vpc_cfg.nat_eip_tags, {})
-    nat_gateway_destination_cidr_block                                = try(local.raw_vpc_cfg.nat_gateway_destination_cidr_block, "0.0.0.0/0")
-    nat_gateway_tags                                                  = try(local.raw_vpc_cfg.nat_gateway_tags, {})
-    outpost_acl_tags                                                  = try(local.raw_vpc_cfg.outpost_acl_tags, {})
-    outpost_arn                                                       = try(local.raw_vpc_cfg.outpost_arn, null)
-    outpost_az                                                        = try(local.raw_vpc_cfg.outpost_az, null)
-    outpost_dedicated_network_acl                                     = try(local.raw_vpc_cfg.outpost_dedicated_network_acl, false)
-    outpost_subnet_assign_ipv6_address_on_creation                    = try(local.raw_vpc_cfg.outpost_subnet_assign_ipv6_address_on_creation, false)
-    outpost_subnet_enable_dns64                                       = try(local.raw_vpc_cfg.outpost_subnet_enable_dns64, true)
-    outpost_subnet_enable_resource_name_dns_a_record_on_launch        = try(local.raw_vpc_cfg.outpost_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    outpost_subnet_enable_resource_name_dns_aaaa_record_on_launch     = try(local.raw_vpc_cfg.outpost_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    outpost_subnet_ipv6_native                                        = try(local.raw_vpc_cfg.outpost_subnet_ipv6_native, false)
-    outpost_subnet_ipv6_prefixes                                      = try(local.raw_vpc_cfg.outpost_subnet_ipv6_prefixes, [])
-    outpost_subnet_names                                              = try(local.raw_vpc_cfg.outpost_subnet_names, [])
-    outpost_subnet_private_dns_hostname_type_on_launch                = try(local.raw_vpc_cfg.outpost_subnet_private_dns_hostname_type_on_launch, null)
-    outpost_subnet_suffix                                             = try(local.raw_vpc_cfg.outpost_subnet_suffix, "outpost")
-    outpost_subnet_tags                                               = try(local.raw_vpc_cfg.outpost_subnet_tags, {})
-    outpost_subnets                                                   = try(local.raw_vpc_cfg.outpost_subnets, [])
-    private_acl_tags                                                  = try(local.raw_vpc_cfg.private_acl_tags, {})
-    private_dedicated_network_acl                                     = try(local.raw_vpc_cfg.private_dedicated_network_acl, false)
-    private_route_table_tags                                          = try(local.raw_vpc_cfg.private_route_table_tags, {})
-    private_subnet_assign_ipv6_address_on_creation                    = try(local.raw_vpc_cfg.private_subnet_assign_ipv6_address_on_creation, false)
-    private_subnet_enable_dns64                                       = try(local.raw_vpc_cfg.private_subnet_enable_dns64, true)
-    private_subnet_enable_resource_name_dns_a_record_on_launch        = try(local.raw_vpc_cfg.private_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    private_subnet_enable_resource_name_dns_aaaa_record_on_launch     = try(local.raw_vpc_cfg.private_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    private_subnet_ipv6_native                                        = try(local.raw_vpc_cfg.private_subnet_ipv6_native, false)
-    private_subnet_ipv6_prefixes                                      = try(local.raw_vpc_cfg.private_subnet_ipv6_prefixes, [])
-    private_subnet_names                                              = try(local.raw_vpc_cfg.private_subnet_names, [])
-    private_subnet_private_dns_hostname_type_on_launch                = try(local.raw_vpc_cfg.private_subnet_private_dns_hostname_type_on_launch, null)
-    private_subnet_suffix                                             = try(local.raw_vpc_cfg.private_subnet_suffix, "private")
-    private_subnet_tags_per_az                                        = try(local.raw_vpc_cfg.private_subnet_tags_per_az, {})
-    propagate_intra_route_tables_vgw                                  = try(local.raw_vpc_cfg.propagate_intra_route_tables_vgw, false)
-    propagate_private_route_tables_vgw                                = try(local.raw_vpc_cfg.propagate_private_route_tables_vgw, false)
-    propagate_public_route_tables_vgw                                 = try(local.raw_vpc_cfg.propagate_public_route_tables_vgw, false)
-    public_acl_tags                                                   = try(local.raw_vpc_cfg.public_acl_tags, {})
-    public_dedicated_network_acl                                      = try(local.raw_vpc_cfg.public_dedicated_network_acl, false)
-    public_route_table_tags                                           = try(local.raw_vpc_cfg.public_route_table_tags, {})
-    public_subnet_assign_ipv6_address_on_creation                     = try(local.raw_vpc_cfg.public_subnet_assign_ipv6_address_on_creation, false)
-    public_subnet_enable_dns64                                        = try(local.raw_vpc_cfg.public_subnet_enable_dns64, true)
-    public_subnet_enable_resource_name_dns_a_record_on_launch         = try(local.raw_vpc_cfg.public_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    public_subnet_enable_resource_name_dns_aaaa_record_on_launch      = try(local.raw_vpc_cfg.public_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    public_subnet_ipv6_native                                         = try(local.raw_vpc_cfg.public_subnet_ipv6_native, false)
-    public_subnet_ipv6_prefixes                                       = try(local.raw_vpc_cfg.public_subnet_ipv6_prefixes, [])
-    public_subnet_names                                               = try(local.raw_vpc_cfg.public_subnet_names, [])
-    public_subnet_private_dns_hostname_type_on_launch                 = try(local.raw_vpc_cfg.public_subnet_private_dns_hostname_type_on_launch, null)
-    public_subnet_suffix                                              = try(local.raw_vpc_cfg.public_subnet_suffix, "public")
-    public_subnet_tags_per_az                                         = try(local.raw_vpc_cfg.public_subnet_tags_per_az, {})
-    putin_khuylo                                                      = try(local.raw_vpc_cfg.putin_khuylo, true)
-    redshift_acl_tags                                                 = try(local.raw_vpc_cfg.redshift_acl_tags, {})
-    redshift_dedicated_network_acl                                    = try(local.raw_vpc_cfg.redshift_dedicated_network_acl, false)
-    redshift_route_table_tags                                         = try(local.raw_vpc_cfg.redshift_route_table_tags, {})
-    redshift_subnet_assign_ipv6_address_on_creation                   = try(local.raw_vpc_cfg.redshift_subnet_assign_ipv6_address_on_creation, false)
-    redshift_subnet_enable_dns64                                      = try(local.raw_vpc_cfg.redshift_subnet_enable_dns64, true)
-    redshift_subnet_enable_resource_name_dns_a_record_on_launch       = try(local.raw_vpc_cfg.redshift_subnet_enable_resource_name_dns_a_record_on_launch, false)
-    redshift_subnet_enable_resource_name_dns_aaaa_record_on_launch    = try(local.raw_vpc_cfg.redshift_subnet_enable_resource_name_dns_aaaa_record_on_launch, true)
-    redshift_subnet_group_name                                        = try(local.raw_vpc_cfg.redshift_subnet_group_name, null)
-    redshift_subnet_group_tags                                        = try(local.raw_vpc_cfg.redshift_subnet_group_tags, {})
-    redshift_subnet_ipv6_native                                       = try(local.raw_vpc_cfg.redshift_subnet_ipv6_native, false)
-    redshift_subnet_ipv6_prefixes                                     = try(local.raw_vpc_cfg.redshift_subnet_ipv6_prefixes, [])
-    redshift_subnet_names                                             = try(local.raw_vpc_cfg.redshift_subnet_names, [])
-    redshift_subnet_private_dns_hostname_type_on_launch               = try(local.raw_vpc_cfg.redshift_subnet_private_dns_hostname_type_on_launch, null)
-    redshift_subnet_suffix                                            = try(local.raw_vpc_cfg.redshift_subnet_suffix, "redshift")
-    redshift_subnet_tags                                              = try(local.raw_vpc_cfg.redshift_subnet_tags, {})
-    redshift_subnets                                                  = try(local.raw_vpc_cfg.redshift_subnets, [])
-    reuse_nat_ips                                                     = try(local.raw_vpc_cfg.reuse_nat_ips, false)
-    secondary_cidr_blocks                                             = try(local.raw_vpc_cfg.secondary_cidr_blocks, [])
-    use_ipam_pool                                                     = try(local.raw_vpc_cfg.use_ipam_pool, false)
-    vpc_flow_log_iam_policy_name                                      = try(local.raw_vpc_cfg.vpc_flow_log_iam_policy_name, "vpc-flow-log-to-cloudwatch")
-    vpc_flow_log_iam_policy_use_name_prefix                           = try(local.raw_vpc_cfg.vpc_flow_log_iam_policy_use_name_prefix, true)
-    vpc_flow_log_iam_role_name                                        = try(local.raw_vpc_cfg.vpc_flow_log_iam_role_name, "vpc-flow-log-role")
-    vpc_flow_log_iam_role_use_name_prefix                             = try(local.raw_vpc_cfg.vpc_flow_log_iam_role_use_name_prefix, true)
-    vpc_flow_log_permissions_boundary                                 = try(local.raw_vpc_cfg.vpc_flow_log_permissions_boundary, null)
-    vpc_flow_log_tags                                                 = try(local.raw_vpc_cfg.vpc_flow_log_tags, {})
-    vpc_tags                                                          = try(local.raw_vpc_cfg.vpc_tags, {})
-    vpn_gateway_az                                                    = try(local.raw_vpc_cfg.vpn_gateway_az, null)
-    vpn_gateway_id                                                    = try(local.raw_vpc_cfg.vpn_gateway_id, "")
-    vpn_gateway_tags                                                  = try(local.raw_vpc_cfg.vpn_gateway_tags, {})
-  }
-
-  tags = merge(
-    {
-      Environment = local.env,
-      Project     = local.project,
-      ManagedBy   = lookup(var.global_config, "managed_by", "DylanDevOps"),
-      CostCenter  = lookup(var.global_config, "cost_center", "shared-services"),
-      Terraform   = "true"
-    },
-    var.tags,
-    try(var.global_config.tags, {})
+  database_tags = merge(
+    { Tier = "private-data" },
+    var.database_subnet_tags,
   )
 }

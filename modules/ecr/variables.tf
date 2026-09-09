@@ -1,34 +1,50 @@
-variable "global_config" {
-  description = "Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod."
-  type = object({
-    environment = string
-    region      = string
-    project     = string
-    managed_by  = optional(string, "DylanDevOps")
-    cost_center = optional(string, "shared-services")
-    tags        = optional(map(string), {})
-  })
+variable "name" {
+  description = "Name prefix. Repository names become \"<name>/<key>\" unless use_name_prefix is false."
+  type        = string
+}
+
+variable "use_name_prefix" {
+  description = "Prefix repository names with `name`. Set false when repositories are shared across environments and should be named by the key alone — an image built once and promoted through dev, staging and prod lives in one repository, not three."
+  type        = bool
+  default     = true
+}
+
+variable "repositories" {
+  description = <<-EOT
+    ECR repositories to create, keyed by short name.
+
+    Defaults are the production-safe ones: immutable tags so a deployed digest
+    cannot be swapped under a running workload, scan-on-push so a known CVE is
+    visible before it ships, and KMS encryption.
+  EOT
+  type = map(object({
+    image_tag_mutability = optional(string, "IMMUTABLE")
+    scan_on_push         = optional(bool, true)
+    force_delete         = optional(bool, false)
+    untagged_expiry_days = optional(number, 7)
+    keep_tagged_count    = optional(number, 30)
+    tag_prefixes         = optional(list(string), ["v", "release", "main", "prod"])
+    pull_principal_arns  = optional(list(string), [])
+    tags                 = optional(map(string), {})
+  }))
+  default = {}
 
   validation {
-    condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
-    error_message = "environment must be one of: dev, test, staging, preprod, prod."
+    condition = alltrue([
+      for k, v in var.repositories : contains(["IMMUTABLE", "MUTABLE"], v.image_tag_mutability)
+    ])
+    error_message = "image_tag_mutability must be IMMUTABLE or MUTABLE."
   }
 }
 
-variable "config_file" {
-  description = "Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory."
+variable "kms_key_arn" {
+  description = "KMS key encrypting the repositories. Null falls back to AES256 with an AWS-owned key."
   type        = string
-  default     = "config.yml"
-}
-
-variable "manual_config" {
-  description = "Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly."
-  type        = any
-  default     = {}
+  default     = null
 }
 
 variable "tags" {
-  description = "Extra tags, merged over the ones derived from `global_config`."
+  description = "Tags applied to every repository."
   type        = map(string)
   default     = {}
 }

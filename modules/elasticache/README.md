@@ -1,96 +1,43 @@
 # elasticache
 
-ElastiCache replication group or cluster.
-
-Wraps `terraform-aws-elasticache` (v1.1.0). Configuration comes from the `elasticache:` block of a YAML file.
-
 ## Usage
 
 ```hcl
 module "elasticache" {
-  source = "../../modules/elasticache"
+  source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/elasticache?ref=v1.0.0"
 
-  config_file = "config.yml"
+  name               = local.name_prefix
+  subnet_group_name  = module.vpc.elasticache_subnet_group_name
+  security_group_ids = [module.security_groups.ecs_sg_id]
 
-  global_config = {
-    environment = "dev"
-    region      = "ap-southeast-1"
-    project     = "SM-Platform"
-  }
-
-  vpc_id = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnets
+  tags               = local.tags
 }
 ```
 
-```yaml
-# config.yml
-app_name: "base"
-service_type: "infra"
+Every input not listed above has a default — 24 of them. See `variables.tf`.
 
-elasticache:
-  enabled: false
-  engine: "redis"
-  engine_version: "7.1"
-  node_type: "cache.t4g.micro"
-  num_cache_nodes: 1
-  num_node_groups: 1                             # shards, for cluster mode
-  replicas_per_node_group: 2                     # prod
-  port: 6379
-  parameter_group_name: "default.redis7"
-  automatic_failover_enabled: true               # requires at least one replica
-  multi_az_enabled: true
-  snapshot_retention_limit: 7                    # 0 disables snapshots
-  snapshot_window: "03:00-05:00"
-  maintenance_window: "sun:05:00-sun:07:00"
-  apply_immediately: false
-  auto_minor_version_upgrade: true
-  kms_key_arn: null
-  security_group_ids: []                         # empty = the module creates one
+## Required inputs
 
-# 41 further upstream arguments are listed, grouped and commented out,
-# in examples/module-config/elasticache.yml
-```
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0, < 6.0 |
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| aws | >= 5.0, < 6.0 |
-
-Configured by the caller. This module declares no `provider` and no `backend`.
-
-## Modules
-
-| Name | Source | Version |
-|------|--------|---------|
-| `terraform-aws-elasticache` | `terraform-aws-elasticache` | `v1.1.0` |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `vpc_id` | VPC ID for orchestration | `string` | `null` | no |
-| `private_subnets` | Private Subnets for orchestration | `list(string)` | `null` | no |
-| `global_config` | Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod. | `object` | n/a | **yes** |
-| `config_file` | Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory. | `string` | `"config.yml"` | no |
-| `manual_config` | Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly. | `any` | `{}` | no |
-| `tags` | Extra tags, merged over the ones derived from `global_config`. | `map(string)` | `{}` | no |
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Replication group identifier, e.g. "dev-redis". |
+| `subnet_group_name` | `string` | ElastiCache subnet group. From module.vpc.elasticache_subnet_group_name, which spans the database subnets — no internet route in either direction. |
+| `security_group_ids` | `list(string)` | Security groups for the cache nodes. From module.security_groups.elasticache_sg_id. |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `cluster_id` | ID of the ElastiCache cluster |
-| `cluster_arn` | ARN of the ElastiCache cluster |
-| `primary_endpoint_address` | Primary endpoint address (Redis replication group) |
-| `reader_endpoint_address` | Reader endpoint address (Redis replication group) |
-| `cluster_endpoint` | Cluster endpoint (Memcached / Redis Cluster Mode) |
-| `port` | Port of the ElastiCache cluster |
+|---|---|
+| `replication_group_id` | Replication group ID. |
+| `arn` | Replication group ARN. |
+| `primary_endpoint_address` | Primary endpoint for writes, when cluster mode is off. Null in cluster mode — use configuration_endpoint_address. |
+| `reader_endpoint_address` | Reader endpoint, which load-balances across replicas. Null in cluster mode. |
+| `configuration_endpoint_address` | Configuration endpoint, used by cluster-mode clients. Null when cluster mode is off. |
+| `port` | Port the cache listens on. |
+| `member_clusters` | Individual cache cluster IDs in the group. |
+| `parameter_group_name` | Parameter group name. |
+
+## Notes
+
+- Pin a tag in `source`, never a branch.
+- A worked, wired-together example is in [`examples/complete`](../../examples/complete).

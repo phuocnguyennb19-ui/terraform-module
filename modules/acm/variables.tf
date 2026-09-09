@@ -1,34 +1,50 @@
-variable "global_config" {
-  description = "Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod."
-  type = object({
-    environment = string
-    region      = string
-    project     = string
-    managed_by  = optional(string, "DylanDevOps")
-    cost_center = optional(string, "shared-services")
-    tags        = optional(map(string), {})
-  })
+variable "domain_name" {
+  description = "Primary domain for the certificate, e.g. \"app.example.com\" or \"*.example.com\"."
+  type        = string
+}
+
+variable "subject_alternative_names" {
+  description = "Additional names on the same certificate. A wildcard does not cover the apex, so a certificate for *.example.com usually needs example.com listed here."
+  type        = list(string)
+  default     = []
+}
+
+variable "zone_id" {
+  description = "Route53 hosted zone ID where the DNS validation records are written. Comes from the route53 module."
+  type        = string
+}
+
+variable "create_route53_records" {
+  description = "Write the validation CNAMEs into zone_id. Set false only when the zone lives in another account and the records are created there."
+  type        = bool
+  default     = true
+}
+
+variable "wait_for_validation" {
+  description = "Block the apply until ACM reports the certificate ISSUED. Leave true: an ALB HTTPS listener referencing a PENDING_VALIDATION certificate fails the apply, and this turns a confusing listener error into a clear certificate one."
+  type        = bool
+  default     = true
+}
+
+variable "validation_timeout" {
+  description = "How long to wait for validation, e.g. \"10m\". Null uses the provider default."
+  type        = string
+  default     = null
+}
+
+variable "key_algorithm" {
+  description = "Certificate key algorithm: RSA_2048, EC_prime256v1 or EC_secp384r1."
+  type        = string
+  default     = "RSA_2048"
 
   validation {
-    condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
-    error_message = "environment must be one of: dev, test, staging, preprod, prod."
+    condition     = contains(["RSA_2048", "RSA_3072", "RSA_4096", "EC_prime256v1", "EC_secp384r1"], var.key_algorithm)
+    error_message = "key_algorithm must be one of RSA_2048, RSA_3072, RSA_4096, EC_prime256v1, EC_secp384r1."
   }
 }
 
-variable "config_file" {
-  description = "Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory."
-  type        = string
-  default     = "config.yml"
-}
-
-variable "manual_config" {
-  description = "Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly."
-  type        = any
-  default     = {}
-}
-
 variable "tags" {
-  description = "Extra tags, merged over the ones derived from `global_config`."
+  description = "Tags applied to the certificate."
   type        = map(string)
   default     = {}
 }

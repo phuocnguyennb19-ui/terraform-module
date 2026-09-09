@@ -1,19 +1,24 @@
-output "acm_certificate_arn" {
-  description = "ARN of the ACM certificate"
+output "certificate_arn" {
+  description = "Certificate ARN. Consumed by the alb module's HTTPS listener."
   value       = module.acm.acm_certificate_arn
 }
 
-output "acm_certificate_domain_validation_options" {
-  description = "Domain validation options (CNAME records to create)"
-  value       = module.acm.acm_certificate_domain_validation_options
+output "certificate_domain_name" {
+  description = "Primary domain on the certificate."
+  value       = var.domain_name
 }
 
-output "acm_certificate_status" {
-  description = "Status of the certificate (PENDING_VALIDATION, ISSUED, etc.)"
+output "certificate_domain_names" {
+  description = "Every distinct name the certificate covers, primary plus SANs."
+  value       = module.acm.distinct_domain_names
+}
+
+output "certificate_status" {
+  description = "Certificate status — ISSUED once validation completes."
   value       = module.acm.acm_certificate_status
 }
 
-output "acm_certificate_domain" {
-  description = "Primary domain name of the certificate"
-  value       = local.acm_config.domain_name
+output "validation_record_fqdns" {
+  description = "FQDNs of the DNS validation records."
+  value       = module.acm.validation_route53_record_fqdns
 }

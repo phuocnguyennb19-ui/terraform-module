@@ -1,79 +1,103 @@
-module "elasticache" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-elasticache.git?ref=v1.1.0"
+# ELASTICACHE (REDIS) REPLICATION GROUP
+#
+# Placed in the foundation's cache subnet group — which spans the database
+# subnets — and the platform's cache security group. Both are inputs.
+#
+# Written against the provider directly. The replication group is one resource
+# plus a parameter group, and the community module's main value is defaults this
+# platform sets explicitly anyway.
+#
+# Encryption at rest and in transit default to on. Both are immutable after
+# creation on the engine versions in common use, so turning them on later means
+# building a new cache and cutting over.
 
-  cluster_id      = local.elasticache_config.cluster_id
-  engine          = local.elasticache_config.engine
-  node_type       = local.elasticache_config.node_type
-  num_cache_nodes = local.elasticache_config.num_cache_nodes
-  engine_version  = local.elasticache_config.engine_version
-  port            = local.elasticache_config.port
+data "aws_secretsmanager_secret_version" "auth_token" {
+  count = var.auth_token_secret_arn != null ? 1 : 0
 
-  # Network — supplied by the caller
-  subnet_ids = var.private_subnets
+  secret_id = var.auth_token_secret_arn
+}
 
-  # Security
-  transit_encryption_enabled = true
-  at_rest_encryption_enabled = true
-  kms_key_arn                = local.elasticache_config.kms_key_arn
-  security_group_ids         = local.elasticache_config.security_group_ids
+resource "aws_elasticache_parameter_group" "this" {
+  name        = "${var.name}-${replace(var.parameter_group_family, ".", "")}"
+  family      = var.parameter_group_family
+  description = "Parameter group for ${var.name}"
 
-  automatic_failover_enabled = local.elasticache_config.automatic_failover_enabled
-  multi_az_enabled           = local.elasticache_config.multi_az_enabled
+  dynamic "parameter" {
+    for_each = var.parameters
 
-  # Operational
-  maintenance_window         = local.elasticache_config.maintenance_window
-  snapshot_retention_limit   = local.elasticache_config.snapshot_retention_limit
-  snapshot_window            = local.elasticache_config.snapshot_window
-  apply_immediately          = local.elasticache_config.apply_immediately
-  auto_minor_version_upgrade = local.elasticache_config.auto_minor_version_upgrade
-  parameter_group_name       = local.elasticache_config.parameter_group_name
+    content {
+      name  = parameter.value.name
+      value = parameter.value.value
+    }
+  }
 
-  # Sharding (Redis Cluster Mode)
-  num_node_groups         = local.elasticache_config.num_node_groups
-  replicas_per_node_group = local.elasticache_config.replicas_per_node_group
+  tags = merge(var.tags, { Name = "${var.name}-params" })
 
-  tags = local.tags
+  lifecycle {
+    create_before_destroy = true
+  }
+}
 
-  # full upstream surface
-  auth_token                                = local.elasticache_config.auth_token
-  auth_token_update_strategy                = local.elasticache_config.auth_token_update_strategy
-  availability_zone                         = local.elasticache_config.availability_zone
-  az_mode                                   = local.elasticache_config.az_mode
-  cluster_mode_enabled                      = local.elasticache_config.cluster_mode_enabled
-  create                                    = local.elasticache_config.create
-  create_cluster                            = local.elasticache_config.create_cluster
-  create_parameter_group                    = local.elasticache_config.create_parameter_group
-  create_primary_global_replication_group   = local.elasticache_config.create_primary_global_replication_group
-  create_replication_group                  = local.elasticache_config.create_replication_group
-  create_secondary_global_replication_group = local.elasticache_config.create_secondary_global_replication_group
-  create_security_group                     = local.elasticache_config.create_security_group
-  create_subnet_group                       = local.elasticache_config.create_subnet_group
-  data_tiering_enabled                      = local.elasticache_config.data_tiering_enabled
-  description                               = local.elasticache_config.description
-  final_snapshot_identifier                 = local.elasticache_config.final_snapshot_identifier
-  global_replication_group_id               = local.elasticache_config.global_replication_group_id
-  ip_discovery                              = local.elasticache_config.ip_discovery
-  network_type                              = local.elasticache_config.network_type
-  notification_topic_arn                    = local.elasticache_config.notification_topic_arn
-  num_cache_clusters                        = local.elasticache_config.num_cache_clusters
-  outpost_mode                              = local.elasticache_config.outpost_mode
-  parameter_group_description               = local.elasticache_config.parameter_group_description
-  parameter_group_family                    = local.elasticache_config.parameter_group_family
-  parameters                                = local.elasticache_config.parameters
-  preferred_availability_zones              = local.elasticache_config.preferred_availability_zones
-  preferred_cache_cluster_azs               = local.elasticache_config.preferred_cache_cluster_azs
-  preferred_outpost_arn                     = local.elasticache_config.preferred_outpost_arn
-  replication_group_id                      = local.elasticache_config.replication_group_id
-  security_group_description                = local.elasticache_config.security_group_description
-  security_group_name                       = local.elasticache_config.security_group_name
-  security_group_names                      = local.elasticache_config.security_group_names
-  security_group_rules                      = local.elasticache_config.security_group_rules
-  security_group_tags                       = local.elasticache_config.security_group_tags
-  security_group_use_name_prefix            = local.elasticache_config.security_group_use_name_prefix
-  snapshot_arns                             = local.elasticache_config.snapshot_arns
-  snapshot_name                             = local.elasticache_config.snapshot_name
-  subnet_group_description                  = local.elasticache_config.subnet_group_description
-  subnet_group_name                         = local.elasticache_config.subnet_group_name
-  user_group_ids                            = local.elasticache_config.user_group_ids
-  vpc_id                                    = local.elasticache_config.vpc_id
+resource "aws_elasticache_replication_group" "this" {
+  replication_group_id = var.name
+  description          = var.description
+
+  engine         = "redis"
+  engine_version = var.engine_version
+  node_type      = var.node_type
+  port           = var.port
+
+  parameter_group_name = aws_elasticache_parameter_group.this.name
+
+  # ---- Placement, from the foundation -------------------------------------
+  subnet_group_name  = var.subnet_group_name
+  security_group_ids = var.security_group_ids
+
+  # ---- Topology -----------------------------------------------------------
+  # num_cache_clusters and num_node_groups are mutually exclusive: the first
+  # describes a non-sharded group, the second a sharded one.
+  num_cache_clusters      = var.cluster_mode_enabled ? null : var.num_cache_clusters
+  num_node_groups         = var.cluster_mode_enabled ? var.num_node_groups : null
+  replicas_per_node_group = var.cluster_mode_enabled ? var.replicas_per_node_group : null
+
+  automatic_failover_enabled = var.automatic_failover_enabled
+  multi_az_enabled           = var.automatic_failover_enabled ? var.multi_az_enabled : false
+
+  # ---- Encryption ---------------------------------------------------------
+  at_rest_encryption_enabled = var.at_rest_encryption_enabled
+  transit_encryption_enabled = var.transit_encryption_enabled
+  kms_key_id                 = var.at_rest_encryption_enabled ? var.kms_key_arn : null
+
+  auth_token = var.auth_token_secret_arn != null ? data.aws_secretsmanager_secret_version.auth_token[0].secret_string : null
+
+  # ---- Backup and maintenance --------------------------------------------
+  snapshot_retention_limit = var.snapshot_retention_limit
+  snapshot_window          = var.snapshot_retention_limit > 0 ? var.snapshot_window : null
+  maintenance_window       = var.maintenance_window
+
+  apply_immediately          = var.apply_immediately
+  auto_minor_version_upgrade = var.auto_minor_version_upgrade
+
+  notification_topic_arn = var.notification_topic_arn
+
+  dynamic "log_delivery_configuration" {
+    for_each = var.log_delivery
+
+    content {
+      destination      = log_delivery_configuration.value.destination
+      destination_type = log_delivery_configuration.value.destination_type
+      log_format       = log_delivery_configuration.value.log_format
+      log_type         = log_delivery_configuration.key
+    }
+  }
+
+  tags = merge(var.tags, { Name = var.name })
+
+  lifecycle {
+    # The auth token is read from Secrets Manager at plan time. Rotating the
+    # secret would otherwise show as a diff on every plan after rotation and
+    # trigger a modification of the replication group; rotation is handled
+    # through the ElastiCache AUTH rotation strategy, not by Terraform.
+    ignore_changes = [auth_token]
+  }
 }

@@ -1,118 +1,48 @@
 # alb
 
-Application Load Balancer, its security group, listeners and target groups.
-
-Wraps `terraform-aws-security-group` (v5.1.0), `terraform-aws-alb` (v9.11.0). Configuration comes from the `alb:` block of a YAML file.
-
 ## Usage
 
 ```hcl
 module "alb" {
-  source = "../../modules/alb"
+  source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/alb?ref=v1.0.0"
 
-  config_file = "config.yml"
+  name               = local.name_prefix
+  vpc_id             = module.vpc.vpc_id
+  subnet_ids         = module.vpc.private_subnet_ids
+  security_group_ids = [module.security_groups.ecs_sg_id]
 
-  global_config = {
-    environment = "dev"
-    region      = "ap-southeast-1"
-    project     = "SM-Platform"
-  }
-
-  public_subnets = module.vpc.public_subnets
-  private_subnets = module.vpc.private_subnets
-  vpc_id = module.vpc.vpc_id
-  vpc_cidr_block = module.vpc.vpc_cidr_block
+  tags               = local.tags
 }
 ```
 
-```yaml
-# config.yml
-app_name: "base"
-service_type: "infra"
+Every input not listed above has a default — 21 of them. See `variables.tf`.
 
-alb:
-  enabled: false
-  internal: false                                # true puts it on the private subnets
-  idle_timeout: 60
-  enable_deletion_protection: true               # prod
-  enable_waf_fail_open: false
-  drop_invalid_header_fields: true
-  preserve_host_header: false
-  desync_mitigation_mode: "defensive"
-  xff_header_processing_mode: "append"
-  security_group_ingress_rules:                  # the module creates the ALB's own SG
-    https:
-      from_port:   443
-      to_port:     443
-      ip_protocol: "tcp"
-      description: "HTTPS from the internet"
-      cidr_ipv4:   "0.0.0.0/0"
-  listeners:                                     # MAP (upstream v9)
-    https:
-      port:            443
-      protocol:        "HTTPS"
-      certificate_arn: "arn:aws:acm:ap-southeast-1:111122223333:certificate/abc-123"
-      forward:
-        target_group_key: "app"
-  target_groups:                                 # MAP (upstream v9)
-    app:
-      protocol:    "HTTP"
-      port:        8080
-      target_type: "ip"                          # ip is required for Fargate
-      health_check:
-        enabled: true
-        path:    "/healthz"
-        matcher: "200"
-  access_logs:
-    bucket:  "sm-platform-dev-logs"
-    prefix:  "alb"
-    enabled: true
-  connection_logs: {}
+## Required inputs
 
-# 26 further upstream arguments are listed, grouped and commented out,
-# in examples/module-config/alb.yml
-```
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0, < 6.0 |
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| aws | >= 5.0, < 6.0 |
-
-Configured by the caller. This module declares no `provider` and no `backend`.
-
-## Modules
-
-| Name | Source | Version |
-|------|--------|---------|
-| `terraform-aws-security-group` | `terraform-aws-security-group` | `v5.1.0` |
-| `terraform-aws-alb` | `terraform-aws-alb` | `v9.11.0` |
-
-## Inputs
-
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `public_subnets` | List of public subnet IDs for internet-facing ALB | `list(string)` | `null` | no |
-| `private_subnets` | List of private subnet IDs for internal ALB | `list(string)` | `null` | no |
-| `vpc_id` | VPC ID for security group creation | `string` | `null` | no |
-| `vpc_cidr_block` | VPC CIDR block — used to scope ingress rules | `string` | `"10.0.0.0/16"` | no |
-| `global_config` | Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod. | `object` | n/a | **yes** |
-| `config_file` | Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory. | `string` | `"config.yml"` | no |
-| `manual_config` | Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly. | `any` | `{}` | no |
-| `tags` | Extra tags, merged over the ones derived from `global_config`. | `map(string)` | `{}` | no |
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Load balancer name. Must be 32 characters or fewer — AWS rejects longer names, and the error arrives at apply time, not plan time. |
+| `vpc_id` | `string` | VPC the load balancer and its target groups live in. From the foundation: module.vpc.vpc_id. |
+| `subnet_ids` | `list(string)` | Subnets to place the load balancer in — at least two, in different AZs. Public subnets for an internet-facing ALB, private for an internal one. |
+| `security_group_ids` | `list(string)` | Security groups for the load balancer. From module.security_groups.alb_sg_id. |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| `alb_sg_id` | ID of the ALB security group |
-| `alb_sg_arn` | ARN of the ALB security group |
-| `lb_id` |  |
-| `target_group_arns` |  |
+|---|---|
+| `arn` | Load balancer ARN. |
+| `arn_suffix` | ARN suffix in the form app/<name>/<id>. This is the LoadBalancer dimension CloudWatch metrics are published under — an alarm needs this, not the ARN. |
+| `dns_name` | Load balancer DNS name. This is the alias target for the Route53 record. |
+| `zone_id` | Canonical hosted zone ID of the load balancer. Route53 alias records need this alongside dns_name. |
+| `target_group_arn_suffixes` | Map of target group key to ARN suffix, the TargetGroup dimension for CloudWatch metrics. |
+| `target_group_arns` | Map of target group key to ARN. An autoscaling group consumes these as target_group_arns; in EKS the Ingress annotation references them by ARN. |
+| `target_group_names` | Map of target group key to name. |
+| `listener_arns` | Map of listener key to ARN. |
+| `https_listener_arn` | ARN of the HTTPS listener, or null when no certificate was supplied. |
+| `access_logs_bucket` | S3 bucket receiving access logs, or null when access logs are disabled. |
+| `access_logs_bucket_arn` | ARN of the access log bucket, when this module created it. |
+
+## Notes
+
+- Pin a tag in `source`, never a branch.
+- A worked, wired-together example is in [`examples/complete`](../../examples/complete).

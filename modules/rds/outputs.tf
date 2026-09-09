@@ -1,46 +1,57 @@
-output "db_instance_address" {
-  description = "Hostname of the RDS instance"
-  value       = module.db.db_instance_address
-}
-
-output "db_instance_arn" {
-  description = "ARN of the RDS instance"
-  value       = module.db.db_instance_arn
-}
-
-output "db_instance_endpoint" {
-  description = "Connection endpoint (host:port)"
-  value       = module.db.db_instance_endpoint
-}
-
-output "db_instance_id" {
-  description = "Identifier of the RDS instance"
+output "instance_id" {
+  description = "DB instance identifier."
   value       = module.db.db_instance_identifier
 }
 
-output "db_instance_port" {
-  description = "Port of the RDS instance"
-  value       = module.db.db_instance_port
+output "instance_arn" {
+  description = "DB instance ARN."
+  value       = module.db.db_instance_arn
 }
 
-output "db_instance_name" {
-  description = "Database name"
+output "endpoint" {
+  description = "Connection endpoint in host:port form."
+  value       = module.db.db_instance_endpoint
+}
+
+output "address" {
+  description = "Hostname of the instance, without the port."
+  value       = module.db.db_instance_address
+}
+
+output "port" {
+  description = "Port the instance listens on."
+  value       = local.port
+}
+
+output "database_name" {
+  description = "Name of the initial database."
   value       = module.db.db_instance_name
 }
 
-output "db_master_user_secret_arn" {
-  description = "ARN of the Secrets Manager secret holding the master user credentials"
+output "username" {
+  description = "Master username. The password is not an output of this module and never exists in Terraform state — read it from master_user_secret_arn."
+  value       = module.db.db_instance_username
+  sensitive   = true
+}
+
+output "master_user_secret_arn" {
+  description = <<-EOT
+    ARN of the AWS-managed Secrets Manager secret holding the master credentials.
+
+    Grant an application's role secretsmanager:GetSecretValue on this ARN and let
+    it resolve the password at runtime. Do not read it in Terraform: doing so
+    writes the plaintext into state, which is exactly what this arrangement
+    exists to avoid.
+  EOT
   value       = try(module.db.db_instance_master_user_secret_arn, null)
 }
 
-output "db_security_group_id" {
-  description = "ID of the RDS security group"
-  value       = module.rds_sg.security_group_id
+output "parameter_group_name" {
+  description = "DB parameter group name."
+  value       = module.db.db_parameter_group_id
 }
 
-output "db_subnet_group_name" {
-  description = "Name of the DB subnet group"
-  # terraform-aws-rds v6.10.0 emits db_subnet_group_id (which is the group's name
-  # in AWS); there is no db_subnet_group_name. Output name kept for consumers.
-  value = try(module.db.db_subnet_group_id, null)
+output "cloudwatch_log_groups" {
+  description = "CloudWatch log groups the instance exports to."
+  value       = module.db.db_instance_cloudwatch_log_groups
 }

@@ -1,44 +1,34 @@
-# Single-role mode (backward compat — when no roles map defined in config)
-output "iam_role_arn" {
-  description = "ARN of the primary IAM role (single-role mode)"
-  value = try(
-    module.iam_assumable_role_default[0].iam_role_arn,
-    module.iam_assumable_role_factory[keys(module.iam_assumable_role_factory)[0]].iam_role_arn,
-    null
-  )
+output "ec2_instance_role_arn" {
+  description = "EC2 instance role ARN."
+  value       = one(aws_iam_role.ec2[*].arn)
 }
 
-output "iam_role_name" {
-  description = "Name of the primary IAM role (single-role mode)"
-  value = try(
-    module.iam_assumable_role_default[0].iam_role_name,
-    module.iam_assumable_role_factory[keys(module.iam_assumable_role_factory)[0]].iam_role_name,
-    null
-  )
+output "ec2_instance_role_name" {
+  description = "EC2 instance role name."
+  value       = one(aws_iam_role.ec2[*].name)
 }
 
-# Multi-role factory outputs
-output "all_role_arns" {
-  description = "Map of all role names to ARNs created by the factory (key = role name)"
-  value       = { for k, v in module.iam_assumable_role_factory : k => v.iam_role_arn }
+output "ec2_instance_profile_name" {
+  description = "EC2 instance profile name. Consumed by the ec2 module as iam_instance_profile."
+  value       = one(aws_iam_instance_profile.ec2[*].name)
 }
 
-output "all_role_names" {
-  description = "Map of all role names created by the factory"
-  value       = { for k, v in module.iam_assumable_role_factory : k => v.iam_role_name }
+output "ec2_instance_profile_arn" {
+  description = "EC2 instance profile ARN."
+  value       = one(aws_iam_instance_profile.ec2[*].arn)
 }
 
-output "policy_arns" {
-  description = "Map of custom policy names to ARNs"
-  value       = { for k, v in aws_iam_policy.custom : k => v.arn }
+output "rds_monitoring_role_arn" {
+  description = "RDS Enhanced Monitoring role ARN. Consumed by the rds module as monitoring_role_arn."
+  value       = one(aws_iam_role.rds_monitoring[*].arn)
 }
 
-output "instance_profile_arns" {
-  description = "Map of IAM instance profile ARNs (for EC2 roles)"
-  value       = { for k, v in aws_iam_instance_profile.this : k => v.arn }
+output "additional_role_arns" {
+  description = "Map of additional role key to ARN."
+  value       = { for k, v in aws_iam_role.additional : k => v.arn }
 }
 
-output "instance_profile_names" {
-  description = "Map of IAM instance profile names"
-  value       = { for k, v in aws_iam_instance_profile.this : k => v.name }
+output "additional_role_names" {
+  description = "Map of additional role key to name."
+  value       = { for k, v in aws_iam_role.additional : k => v.name }
 }

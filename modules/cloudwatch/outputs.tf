@@ -1,24 +1,34 @@
-output "log_group_arns" {
-  description = "Map of log group ARNs"
-  value       = { for k, v in module.log_group : k => v.cloudwatch_log_group_arn }
+output "sns_topic_arn" {
+  description = "SNS topic every alarm publishes to — the one created here, or the one passed in via sns_topic_arn."
+  value       = local.topic_arn
+}
+
+output "sns_topic_name" {
+  description = "Name of the created SNS topic, or null when an existing topic was supplied."
+  value       = one(aws_sns_topic.alarms[*].name)
 }
 
 output "log_group_names" {
-  description = "Map of log group names"
-  value       = { for k, v in module.log_group : k => v.cloudwatch_log_group_name }
+  description = "Map of log group key to name."
+  value       = { for k, v in aws_cloudwatch_log_group.this : k => v.name }
 }
 
-output "metric_alarm_arns" {
-  description = "Map of metric alarm ARNs"
-  value       = { for k, v in module.metric_alarm : k => v.cloudwatch_metric_alarm_arn }
+output "log_group_arns" {
+  description = "Map of log group key to ARN."
+  value       = { for k, v in aws_cloudwatch_log_group.this : k => v.arn }
 }
 
-output "metric_alarm_ids" {
-  description = "Map of metric alarm IDs"
-  value       = { for k, v in module.metric_alarm : k => v.cloudwatch_metric_alarm_id }
+output "alarm_arns" {
+  description = "Map of alarm key to ARN."
+  value       = { for k, v in aws_cloudwatch_metric_alarm.this : k => v.arn }
 }
 
-output "dashboard_arns" {
-  description = "Map of CloudWatch dashboard ARNs"
-  value       = { for k, v in aws_cloudwatch_dashboard.this : k => v.dashboard_arn }
+output "alarm_names" {
+  description = "Map of alarm key to name."
+  value       = { for k, v in aws_cloudwatch_metric_alarm.this : k => v.alarm_name }
+}
+
+output "dashboard_name" {
+  description = "CloudWatch dashboard name, or null when not created."
+  value       = one(aws_cloudwatch_dashboard.this[*].dashboard_name)
 }

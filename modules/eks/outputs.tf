@@ -1,80 +1,65 @@
-# CLUSTER
-
 output "cluster_name" {
-  description = "Name of the EKS cluster"
+  description = "Cluster name."
   value       = module.eks.cluster_name
 }
 
 output "cluster_arn" {
-  description = "ARN of the EKS cluster"
+  description = "Cluster ARN."
   value       = module.eks.cluster_arn
 }
 
 output "cluster_endpoint" {
-  description = "Endpoint of the Kubernetes API server"
+  description = "Kubernetes API server endpoint."
   value       = module.eks.cluster_endpoint
 }
 
 output "cluster_version" {
-  description = "Kubernetes version running on the control plane"
+  description = "Kubernetes version actually running, which may be ahead of the requested minor after an AWS-initiated patch."
   value       = module.eks.cluster_version
 }
 
 output "cluster_certificate_authority_data" {
-  description = "Base64-encoded CA certificate for the cluster"
+  description = "Base64 CA certificate for the API server. Needed to build a kubeconfig. Not a secret — it is a public certificate — but it is bulky, so it is not printed by default."
   value       = module.eks.cluster_certificate_authority_data
   sensitive   = true
 }
 
-# IDENTITY — IRSA
-
-output "oidc_provider_arn" {
-  description = "ARN of the IAM OIDC provider, for IRSA role trust policies"
-  value       = try(module.eks.oidc_provider_arn, null)
-}
-
-output "oidc_provider_url" {
-  description = "URL of the cluster's OIDC issuer"
-  value       = try(module.eks.cluster_oidc_issuer_url, null)
-}
-
-# SECURITY
-
 output "cluster_security_group_id" {
-  description = "Security group ID attached to the control plane"
+  description = "Security group EKS created for the control plane."
   value       = module.eks.cluster_security_group_id
 }
 
 output "node_security_group_id" {
-  description = "Security group ID shared by the managed node groups"
-  value       = try(module.eks.node_security_group_id, null)
+  description = "Security group EKS created for the nodes. Add rules here for anything that must reach the nodes and is not already covered by the platform's own node security group."
+  value       = module.eks.node_security_group_id
 }
 
-output "kms_key_arn" {
-  description = "ARN of the KMS key used for envelope encryption of secrets"
-  value       = try(module.eks.kms_key_arn, null)
+output "oidc_provider_arn" {
+  description = "IAM OIDC provider ARN. Required to write an IRSA trust policy outside this module."
+  value       = module.eks.oidc_provider_arn
 }
 
-# NODE GROUPS
+output "oidc_provider_url" {
+  description = "OIDC provider URL without the https:// scheme, as it appears in a trust policy condition key."
+  value       = module.eks.oidc_provider
+}
 
-output "eks_managed_node_groups" {
-  description = "Attributes of each managed node group"
-  value       = try(module.eks.eks_managed_node_groups, {})
+output "node_group_arns" {
+  description = "Map of node group key to ARN."
+  value       = { for k, v in module.eks.eks_managed_node_groups : k => v.node_group_arn }
 }
 
 output "node_group_iam_role_arns" {
-  description = "IAM role ARN of each managed node group"
-  value       = try({ for k, v in module.eks.eks_managed_node_groups : k => v.iam_role_arn }, {})
+  description = "Map of node group key to the instance role ARN its nodes run as."
+  value       = { for k, v in module.eks.eks_managed_node_groups : k => v.iam_role_arn }
 }
 
-output "fargate_profiles" {
-  description = "Attributes of each Fargate profile"
-  value       = try(module.eks.fargate_profiles, {})
+output "irsa_role_arns" {
+  description = "Map of IRSA role key to ARN. Annotate the Kubernetes ServiceAccount with eks.amazonaws.com/role-arn set to one of these."
+  value       = { for k, v in aws_iam_role.irsa : k => v.arn }
 }
-
-# KUBECONFIG
 
 output "kubeconfig_command" {
-  description = "Command that writes a kubeconfig entry for this cluster"
-  value       = "aws eks update-kubeconfig --region ${local.region} --name ${module.eks.cluster_name}"
+  description = "The aws CLI command that writes a kubeconfig entry for this cluster."
+  value       = "aws eks update-kubeconfig --region ${data.aws_region.current.name} --name ${module.eks.cluster_name}"
 }

@@ -1,122 +1,200 @@
-module "eks" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-eks.git?ref=v20.31.6"
+# EKS CLUSTER
+#
+# Consumes the foundation. vpc_id and subnet_ids are inputs; this module has no
+# aws_vpc, aws_subnet, aws_nat_gateway or aws_route_table in it and never will.
+# That is what lets an EKS cluster, an EC2 fleet and an RDS instance share one
+# network boundary instead of three parallel ones.
+#
+# Upstream: terraform-aws-modules/eks/aws v20, which is the last line that
+# supports the 5.x AWS provider. v21 requires provider 6.x and restructures the
+# node group and access entry inputs — a coordinated upgrade, not a bump.
 
-  cluster_name    = local.eks_config.cluster_name
-  cluster_version = local.eks_config.cluster_version
+locals {
+  # Managed node groups need a launch template to enforce IMDSv2 and encrypt the
+  # root volume; the module builds one when given these settings.
+  node_group_defaults = {
+    # IMDSv2 required, hop limit 1. Hop limit 1 means a process inside a
+    # container cannot reach the instance metadata service, so a compromised pod
+    # cannot mint credentials for the node's instance role. Workloads that need
+    # AWS permissions get them through IRSA instead. Raising this to 2 to "fix"
+    # a pod that cannot reach IMDS re-opens exactly that path.
+    metadata_options = {
+      http_endpoint               = "enabled"
+      http_tokens                 = "required"
+      http_put_response_hop_limit = 1
+      instance_metadata_tags      = "disabled"
+    }
 
-  vpc_id     = var.vpc_id
-  subnet_ids = local.eks_config.subnet_ids
+    ebs_optimized     = true
+    enable_monitoring = true
 
-  cluster_endpoint_private_access      = local.eks_config.endpoint_private_access
-  cluster_endpoint_public_access       = local.eks_config.endpoint_public_access
-  cluster_endpoint_public_access_cidrs = local.eks_config.public_access_cidrs
+    iam_role_attach_cni_policy = true
+  }
 
-  cluster_enabled_log_types              = local.eks_config.enabled_log_types
-  create_cloudwatch_log_group            = local.eks_config.create_cloudwatch_log_group
-  cloudwatch_log_group_retention_in_days = local.eks_config.cloudwatch_log_group_retention_in_days
+  node_groups = {
+    for k, g in var.node_groups : k => {
+      name = "${var.cluster_name}-${k}"
 
-  # Access entries, not the aws-auth ConfigMap. No kubernetes provider required.
-  authentication_mode                      = local.eks_config.authentication_mode
-  enable_cluster_creator_admin_permissions = local.eks_config.enable_cluster_creator_admin_permissions
-  access_entries                           = local.eks_config.access_entries
+      instance_types = g.instance_types
+      capacity_type  = g.capacity_type
+      ami_type       = g.ami_type
 
-  enable_irsa = local.eks_config.enable_irsa
+      min_size     = g.min_size
+      max_size     = g.max_size
+      desired_size = g.desired_size
 
-  # Envelope encryption for Kubernetes secrets at rest.
-  create_kms_key            = local.eks_config.create_kms_key
-  cluster_encryption_config = local.eks_config.cluster_encryption_config
-  kms_key_administrators    = []
+      subnet_ids = coalesce(g.subnet_ids, var.subnet_ids)
 
-  cluster_addons = local.eks_config.addons
+      block_device_mappings = {
+        root = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = g.disk_size
+            volume_type           = g.disk_type
+            encrypted             = true
+            kms_key_id            = var.kms_key_arn
+            delete_on_termination = true
+          }
+        }
+      }
 
-  eks_managed_node_group_defaults = local.eks_config.node_group_defaults
-  eks_managed_node_groups         = local.eks_config.node_groups
+      labels = g.labels
+      taints = g.taints
 
-  fargate_profiles = local.eks_config.fargate_profiles
+      update_config = {
+        max_unavailable = g.max_unavailable
+      }
 
-  cluster_security_group_additional_rules = local.eks_config.security_group_additional_rules
-  node_security_group_additional_rules    = local.eks_config.node_security_group_additional_rules
+      force_update_version = g.force_update_version
 
-  tags = local.tags
+      vpc_security_group_ids = var.node_security_group_ids
 
-  # full upstream surface
-  attach_cluster_encryption_policy             = local.eks_config.attach_cluster_encryption_policy
-  bootstrap_self_managed_addons                = local.eks_config.bootstrap_self_managed_addons
-  cloudwatch_log_group_class                   = local.eks_config.cloudwatch_log_group_class
-  cloudwatch_log_group_kms_key_id              = local.eks_config.cloudwatch_log_group_kms_key_id
-  cloudwatch_log_group_tags                    = local.eks_config.cloudwatch_log_group_tags
-  cluster_additional_security_group_ids        = local.eks_config.cluster_additional_security_group_ids
-  cluster_addons_timeouts                      = local.eks_config.cluster_addons_timeouts
-  cluster_compute_config                       = local.eks_config.cluster_compute_config
-  cluster_encryption_policy_description        = local.eks_config.cluster_encryption_policy_description
-  cluster_encryption_policy_name               = local.eks_config.cluster_encryption_policy_name
-  cluster_encryption_policy_path               = local.eks_config.cluster_encryption_policy_path
-  cluster_encryption_policy_tags               = local.eks_config.cluster_encryption_policy_tags
-  cluster_encryption_policy_use_name_prefix    = local.eks_config.cluster_encryption_policy_use_name_prefix
-  cluster_identity_providers                   = local.eks_config.cluster_identity_providers
-  cluster_ip_family                            = local.eks_config.cluster_ip_family
-  cluster_remote_network_config                = local.eks_config.cluster_remote_network_config
-  cluster_security_group_description           = local.eks_config.cluster_security_group_description
-  cluster_security_group_id                    = local.eks_config.cluster_security_group_id
-  cluster_security_group_name                  = local.eks_config.cluster_security_group_name
-  cluster_security_group_tags                  = local.eks_config.cluster_security_group_tags
-  cluster_security_group_use_name_prefix       = local.eks_config.cluster_security_group_use_name_prefix
-  cluster_service_ipv4_cidr                    = local.eks_config.cluster_service_ipv4_cidr
-  cluster_service_ipv6_cidr                    = local.eks_config.cluster_service_ipv6_cidr
-  cluster_tags                                 = local.eks_config.cluster_tags
-  cluster_timeouts                             = local.eks_config.cluster_timeouts
-  cluster_upgrade_policy                       = local.eks_config.cluster_upgrade_policy
-  cluster_zonal_shift_config                   = local.eks_config.cluster_zonal_shift_config
-  control_plane_subnet_ids                     = local.eks_config.control_plane_subnet_ids
-  create                                       = local.eks_config.create
-  create_cluster_primary_security_group_tags   = local.eks_config.create_cluster_primary_security_group_tags
-  create_cluster_security_group                = local.eks_config.create_cluster_security_group
-  create_cni_ipv6_iam_policy                   = local.eks_config.create_cni_ipv6_iam_policy
-  create_iam_role                              = local.eks_config.create_iam_role
-  create_node_iam_role                         = local.eks_config.create_node_iam_role
-  create_node_security_group                   = local.eks_config.create_node_security_group
-  custom_oidc_thumbprints                      = local.eks_config.custom_oidc_thumbprints
-  dataplane_wait_duration                      = local.eks_config.dataplane_wait_duration
-  enable_auto_mode_custom_tags                 = local.eks_config.enable_auto_mode_custom_tags
-  enable_efa_support                           = local.eks_config.enable_efa_support
-  enable_kms_key_rotation                      = local.eks_config.enable_kms_key_rotation
-  enable_security_groups_for_pods              = local.eks_config.enable_security_groups_for_pods
-  fargate_profile_defaults                     = local.eks_config.fargate_profile_defaults
-  iam_role_additional_policies                 = local.eks_config.iam_role_additional_policies
-  iam_role_arn                                 = local.eks_config.iam_role_arn
-  iam_role_description                         = local.eks_config.iam_role_description
-  iam_role_name                                = local.eks_config.iam_role_name
-  iam_role_path                                = local.eks_config.iam_role_path
-  iam_role_permissions_boundary                = local.eks_config.iam_role_permissions_boundary
-  iam_role_tags                                = local.eks_config.iam_role_tags
-  iam_role_use_name_prefix                     = local.eks_config.iam_role_use_name_prefix
-  include_oidc_root_ca_thumbprint              = local.eks_config.include_oidc_root_ca_thumbprint
-  kms_key_aliases                              = local.eks_config.kms_key_aliases
-  kms_key_deletion_window_in_days              = local.eks_config.kms_key_deletion_window_in_days
-  kms_key_description                          = local.eks_config.kms_key_description
-  kms_key_enable_default_policy                = local.eks_config.kms_key_enable_default_policy
-  kms_key_override_policy_documents            = local.eks_config.kms_key_override_policy_documents
-  kms_key_owners                               = local.eks_config.kms_key_owners
-  kms_key_service_users                        = local.eks_config.kms_key_service_users
-  kms_key_source_policy_documents              = local.eks_config.kms_key_source_policy_documents
-  kms_key_users                                = local.eks_config.kms_key_users
-  node_iam_role_additional_policies            = local.eks_config.node_iam_role_additional_policies
-  node_iam_role_description                    = local.eks_config.node_iam_role_description
-  node_iam_role_name                           = local.eks_config.node_iam_role_name
-  node_iam_role_path                           = local.eks_config.node_iam_role_path
-  node_iam_role_permissions_boundary           = local.eks_config.node_iam_role_permissions_boundary
-  node_iam_role_tags                           = local.eks_config.node_iam_role_tags
-  node_iam_role_use_name_prefix                = local.eks_config.node_iam_role_use_name_prefix
-  node_security_group_description              = local.eks_config.node_security_group_description
-  node_security_group_enable_recommended_rules = local.eks_config.node_security_group_enable_recommended_rules
-  node_security_group_id                       = local.eks_config.node_security_group_id
-  node_security_group_name                     = local.eks_config.node_security_group_name
-  node_security_group_tags                     = local.eks_config.node_security_group_tags
-  node_security_group_use_name_prefix          = local.eks_config.node_security_group_use_name_prefix
-  openid_connect_audiences                     = local.eks_config.openid_connect_audiences
-  outpost_config                               = local.eks_config.outpost_config
-  prefix_separator                             = local.eks_config.prefix_separator
-  putin_khuylo                                 = local.eks_config.putin_khuylo
-  self_managed_node_group_defaults             = local.eks_config.self_managed_node_group_defaults
-  self_managed_node_groups                     = local.eks_config.self_managed_node_groups
+      tags = merge(var.tags, g.tags)
+    }
+  }
 }
+
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.37.2"
+
+  cluster_name    = var.cluster_name
+  cluster_version = var.kubernetes_version
+
+  # ---- Networking, all from the foundation --------------------------------
+  vpc_id                   = var.vpc_id
+  subnet_ids               = var.subnet_ids
+  control_plane_subnet_ids = var.control_plane_subnet_ids
+
+  cluster_endpoint_private_access      = var.cluster_endpoint_private_access
+  cluster_endpoint_public_access       = var.cluster_endpoint_public_access
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access ? var.cluster_endpoint_public_access_cidrs : []
+
+  cluster_additional_security_group_ids = var.cluster_security_group_ids
+
+  # ---- Encryption ---------------------------------------------------------
+  # Envelope encryption for Kubernetes Secrets. Without it, a Secret in etcd is
+  # base64, which is an encoding, not a protection.
+  create_kms_key = var.kms_key_arn == null
+
+  # merge() rather than a conditional: the two branches of a conditional must
+  # have identical object types, and provider_key_arn is present in only one.
+  cluster_encryption_config = merge(
+    { resources = ["secrets"] },
+    var.kms_key_arn != null ? { provider_key_arn = var.kms_key_arn } : {},
+  )
+
+  # ---- Control plane logging ---------------------------------------------
+  cluster_enabled_log_types              = var.cluster_enabled_log_types
+  create_cloudwatch_log_group            = true
+  cloudwatch_log_group_retention_in_days = var.cluster_log_retention_days
+  cloudwatch_log_group_kms_key_id        = var.cluster_log_kms_key_arn
+
+  # ---- Access -------------------------------------------------------------
+  authentication_mode                      = var.authentication_mode
+  enable_cluster_creator_admin_permissions = var.enable_cluster_creator_admin_permissions
+  access_entries                           = var.access_entries
+
+  enable_irsa = var.enable_irsa
+
+  # ---- Addons -------------------------------------------------------------
+  cluster_addons = var.cluster_addons
+
+  # ---- Node groups --------------------------------------------------------
+  eks_managed_node_group_defaults = local.node_group_defaults
+  eks_managed_node_groups         = local.node_groups
+
+  tags = var.tags
+}
+
+# ---------------------------------------------------------------------------
+# IRSA roles
+#
+# A pod that needs AWS permissions gets its own role through the cluster's OIDC
+# provider. The alternative — attaching the permission to the node's instance
+# role — grants it to every pod on that node, including anything that lands
+# there later.
+# ---------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "irsa_trust" {
+  for_each = var.enable_irsa ? var.irsa_roles : {}
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [module.eks.oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${module.eks.oidc_provider}:sub"
+      values   = [for sa in each.value.namespace_service_accounts : "system:serviceaccount:${sa}"]
+    }
+
+    # Without the aud condition the trust policy accepts a token minted for a
+    # different audience by the same provider.
+    condition {
+      test     = "StringEquals"
+      variable = "${module.eks.oidc_provider}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "irsa" {
+  for_each = var.enable_irsa ? var.irsa_roles : {}
+
+  name               = "${var.cluster_name}-irsa-${each.key}"
+  description        = each.value.description
+  assume_role_policy = data.aws_iam_policy_document.irsa_trust[each.key].json
+
+  tags = merge(var.tags, { Name = "${var.cluster_name}-irsa-${each.key}" })
+}
+
+resource "aws_iam_role_policy_attachment" "irsa" {
+  for_each = merge([
+    for role_key, role in(var.enable_irsa ? var.irsa_roles : {}) : {
+      for arn in role.managed_policy_arns :
+      "${role_key}:${arn}" => { role = role_key, arn = arn }
+    }
+  ]...)
+
+  role       = aws_iam_role.irsa[each.value.role].name
+  policy_arn = each.value.arn
+}
+
+resource "aws_iam_role_policy" "irsa_inline" {
+  for_each = {
+    for k, v in(var.enable_irsa ? var.irsa_roles : {}) : k => v
+    if v.inline_policy != null
+  }
+
+  name   = "${var.cluster_name}-irsa-${each.key}"
+  role   = aws_iam_role.irsa[each.key].id
+  policy = each.value.inline_policy
+}
+
+data "aws_region" "current" {}

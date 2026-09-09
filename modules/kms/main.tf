@@ -1,53 +1,134 @@
-module "kms" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-kms.git?ref=v2.2.1"
+# CUSTOMER-MANAGED KMS KEYS
+#
+# Every encrypted resource in this platform points at a key from here rather
+# than at an AWS-managed key. The difference that matters is the key policy: an
+# AWS-managed key grants the whole account, so "who can decrypt this snapshot"
+# has no answer narrower than "anyone with the right IAM". A customer-managed
+# key with an explicit policy does have that answer, and it is auditable.
+#
+# Keys are written with a deletion window rather than being destroyable: KMS
+# schedules deletion, and everything encrypted under a deleted key is
+# unrecoverable. prevent_destroy is deliberately NOT set here — it would make
+# `terraform destroy` fail for dev environments that are meant to be disposable.
+# The 30-day default window is the real protection.
 
-  description              = local.kms_config.description
-  deletion_window_in_days  = local.kms_config.deletion_window_in_days
-  key_usage                = local.kms_config.key_usage
-  customer_master_key_spec = local.kms_config.customer_master_key_spec
-  multi_region             = local.kms_config.multi_region
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
-  enable_key_rotation = true
-  # rotation_period_in_days is not an argument of terraform-aws-kms v2.2.1 — it
-  # arrived in v3.x. Rotation stays enabled above at the AWS default (365 days).
-  # To make the period configurable, bump the pinned upstream version first.
-
-  policy = local.kms_config.policy
-
-  aliases = local.kms_config.aliases
-
-  key_users          = local.kms_config.key_users
-  key_administrators = local.kms_config.key_administrators
-
-  tags = local.tags
-
-  # full upstream surface
-  aliases_use_name_prefix                = local.kms_config.aliases_use_name_prefix
-  bypass_policy_lockout_safety_check     = local.kms_config.bypass_policy_lockout_safety_check
-  computed_aliases                       = local.kms_config.computed_aliases
-  create                                 = local.kms_config.create
-  create_external                        = local.kms_config.create_external
-  create_replica                         = local.kms_config.create_replica
-  create_replica_external                = local.kms_config.create_replica_external
-  custom_key_store_id                    = local.kms_config.custom_key_store_id
-  enable_default_policy                  = local.kms_config.enable_default_policy
-  enable_route53_dnssec                  = local.kms_config.enable_route53_dnssec
-  grants                                 = local.kms_config.grants
-  is_enabled                             = local.kms_config.is_enabled
-  key_asymmetric_public_encryption_users = local.kms_config.key_asymmetric_public_encryption_users
-  key_asymmetric_sign_verify_users       = local.kms_config.key_asymmetric_sign_verify_users
-  key_hmac_users                         = local.kms_config.key_hmac_users
-  key_material_base64                    = local.kms_config.key_material_base64
-  key_owners                             = local.kms_config.key_owners
-  key_service_roles_for_autoscaling      = local.kms_config.key_service_roles_for_autoscaling
-  key_service_users                      = local.kms_config.key_service_users
-  key_statements                         = local.kms_config.key_statements
-  key_symmetric_encryption_users         = local.kms_config.key_symmetric_encryption_users
-  override_policy_documents              = local.kms_config.override_policy_documents
-  primary_external_key_arn               = local.kms_config.primary_external_key_arn
-  primary_key_arn                        = local.kms_config.primary_key_arn
-  route53_dnssec_sources                 = local.kms_config.route53_dnssec_sources
-  source_policy_documents                = local.kms_config.source_policy_documents
-  valid_to                               = local.kms_config.valid_to
+locals {
+  account_root = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
 }
 
+data "aws_iam_policy_document" "key" {
+  for_each = var.keys
+
+  # Without this statement the key becomes unmanageable: IAM policies cannot
+  # grant access to a key whose own policy does not delegate to the account.
+  # It is the documented AWS default and removing it can orphan the key.
+  dynamic "statement" {
+    for_each = each.value.enable_default_policy ? [1] : []
+
+    content {
+      sid       = "EnableAccountIAMPolicies"
+      effect    = "Allow"
+      actions   = ["kms:*"]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = [local.account_root]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(each.value.key_administrator_arns) > 0 ? [1] : []
+
+    content {
+      sid    = "KeyAdministrators"
+      effect = "Allow"
+      actions = [
+        "kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*",
+        "kms:Put*", "kms:Update*", "kms:Revoke*", "kms:Disable*",
+        "kms:Get*", "kms:Delete*", "kms:TagResource", "kms:UntagResource",
+        "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion",
+      ]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = each.value.key_administrator_arns
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(each.value.key_user_arns) > 0 ? [1] : []
+
+    content {
+      sid    = "KeyUsers"
+      effect = "Allow"
+      actions = [
+        "kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*",
+        "kms:GenerateDataKey*", "kms:DescribeKey",
+      ]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = each.value.key_user_arns
+      }
+    }
+  }
+
+  # Service principals get use of the key, and CreateGrant only through the
+  # service itself — the ViaService condition is what stops a granted service
+  # principal being usable as a general-purpose decrypt path.
+  dynamic "statement" {
+    for_each = length(each.value.service_principals) > 0 ? [1] : []
+
+    content {
+      sid    = "ServicePrincipals"
+      effect = "Allow"
+      actions = [
+        "kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*",
+        "kms:GenerateDataKey*", "kms:DescribeKey", "kms:CreateGrant",
+      ]
+      resources = ["*"]
+
+      principals {
+        type        = "Service"
+        identifiers = each.value.service_principals
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:CallerAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+    }
+  }
+}
+
+resource "aws_kms_key" "this" {
+  for_each = var.keys
+
+  description             = each.value.description
+  deletion_window_in_days = each.value.deletion_window_in_days
+  enable_key_rotation     = each.value.enable_rotation
+  rotation_period_in_days = each.value.enable_rotation ? each.value.rotation_period_in_days : null
+  multi_region            = each.value.multi_region
+  policy                  = data.aws_iam_policy_document.key[each.key].json
+
+  tags = merge(var.tags, each.value.tags, {
+    Name    = "${var.name}-${each.key}"
+    Purpose = each.key
+  })
+}
+
+resource "aws_kms_alias" "this" {
+  for_each = var.keys
+
+  name          = "alias/${var.name}-${each.key}"
+  target_key_id = aws_kms_key.this[each.key].key_id
+}

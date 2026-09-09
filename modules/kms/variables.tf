@@ -1,34 +1,51 @@
-variable "global_config" {
-  description = "Environment context shared by every module: environment, region and project, plus optional managed_by, cost_center and tags. `environment` is validated against dev, test, staging, preprod, prod."
-  type = object({
-    environment = string
-    region      = string
-    project     = string
-    managed_by  = optional(string, "DylanDevOps")
-    cost_center = optional(string, "shared-services")
-    tags        = optional(map(string), {})
-  })
+variable "name" {
+  description = "Name prefix, conventionally \"<project>-<environment>\". Aliases become alias/<name>-<key>."
+  type        = string
+}
+
+variable "keys" {
+  description = <<-EOT
+    Customer-managed KMS keys to create, keyed by purpose — "rds", "ebs", "logs",
+    "secrets", "s3", "eks". The key name becomes part of the alias and is the
+    handle every other module uses to look the ARN up.
+
+    One key per purpose rather than one key for everything: a key policy is the
+    only place you can say "the RDS service may use this and nothing else", and
+    a single shared key collapses that distinction. It also means rotating or
+    revoking one blast radius does not take the others with it.
+
+    service_principals are AWS service principals granted encrypt/decrypt through
+    the key policy, e.g. ["rds.amazonaws.com"], ["logs.<region>.amazonaws.com"].
+  EOT
+  type = map(object({
+    description             = string
+    service_principals      = optional(list(string), [])
+    key_administrator_arns  = optional(list(string), [])
+    key_user_arns           = optional(list(string), [])
+    enable_rotation         = optional(bool, true)
+    rotation_period_in_days = optional(number, 365)
+    deletion_window_in_days = optional(number, 30)
+    multi_region            = optional(bool, false)
+    enable_default_policy   = optional(bool, true)
+    tags                    = optional(map(string), {})
+  }))
+  default = {}
 
   validation {
-    condition     = contains(["dev", "test", "staging", "preprod", "prod"], var.global_config.environment)
-    error_message = "environment must be one of: dev, test, staging, preprod, prod."
+    condition = alltrue([
+      for k, v in var.keys : v.deletion_window_in_days >= 7 && v.deletion_window_in_days <= 30
+    ])
+    error_message = "deletion_window_in_days must be between 7 and 30."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.keys : v.enable_rotation])
+    error_message = "Automatic key rotation must stay enabled. If a key genuinely cannot rotate (an external key store, or a format that pins key material), record the exception and set it outside this module."
   }
 }
 
-variable "config_file" {
-  description = "Path to the YAML config, resolved against `path.cwd` — the directory Terraform is run from, not the module directory."
-  type        = string
-  default     = "config.yml"
-}
-
-variable "manual_config" {
-  description = "Configuration merged over the decoded YAML at the top level. The root composition uses this to pass a layered config; leave unset when calling the module directly."
-  type        = any
-  default     = {}
-}
-
 variable "tags" {
-  description = "Extra tags, merged over the ones derived from `global_config`."
+  description = "Tags applied to every key and alias."
   type        = map(string)
   default     = {}
 }
