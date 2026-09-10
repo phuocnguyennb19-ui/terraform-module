@@ -4,19 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A **library** of 22 reusable AWS Terraform modules under `modules/`. Nothing here deploys
-anything: there is no root composition, no environment directory, no state backend and no
-provider block. Each module takes typed Terraform inputs and returns outputs.
+22 reusable AWS Terraform modules under `modules/`, plus the **root composition** at the
+repository root (`main.tf`, `locals.tf`, `data.tf`, `alarms.tf`, `outputs.tf`, `providers.tf`,
+`backend.tf`, `variables.tf`, `versions.tf`). The root decodes one YAML config and gates every
+module on `<block>.enabled`; it sources modules by relative path (`./modules/<name>`), so a
+tag pins the root and its modules together.
 
-The consumer is [`../terraform-aws-platform`](../terraform-aws-platform), which holds the
-values, the environments and the state, and pulls modules by tag:
+No environment lives here — no values, no environment directory, an empty `backend "s3" {}`.
+[`../terraform-aws-platform`](../terraform-aws-platform) holds only `config.yaml` + `backend.hcl`
+per environment; its Makefile clones this repo at a pinned tag, copies both into the clone, and
+runs Terraform from this root. `config.yaml` / `backend.hcl` are gitignored here.
 
-```hcl
-source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=v1.0.0"
-```
-
-Because the source is a `//modules/<name>` subdirectory, a consumer only ever receives that one
-directory — never the repository root.
+Other callers can still consume a single module by tag —
+`git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=<tag>` — and
+receive only that directory.
 
 `README.md` is the reference: the module table with upstream pins, the version constraints and
 the release rules. Each module has its own `README.md` with full input and output tables,
@@ -36,10 +37,12 @@ them to typed inputs is outstanding work.
 
 ## Commands
 
-No Makefile and no CI in this repo. `examples/complete` is what proves a change compiles — it
-sources every typed module by relative path, so it validates against the working tree:
+No Makefile and no CI in this repo. The root and `examples/complete` are what prove a change
+compiles — both source modules by relative path, so they validate against the working tree:
 
 ```bash
+terraform init -backend=false && terraform validate   # the root
+
 cd examples/complete
 terraform init -backend=false      # no AWS credentials, no state bucket needed
 terraform validate
@@ -59,7 +62,7 @@ terraform fmt -check -recursive
   decides where values come from. (The six legacy modules violate this; that is the bug, not
   the precedent.)
 - **No provider blocks in modules.** A module that declares one cannot be used twice in the
-  same configuration.
+  same configuration. The root's `providers.tf` is the only provider block.
 - **No `depends_on` between modules.** Ordering comes from one module's output feeding
   another's input, so Terraform derives the graph itself.
 - Optional inputs carry defaults, so a caller writes only what is genuinely a decision.
@@ -91,4 +94,4 @@ Never point a consumer's `ref` at a branch.
 
 - The six legacy modules above.
 - `examples/complete` does not cover `ecs-cluster` or `ecs-service`; those are exercised by the
-  platform repository's own root.
+  root composition.

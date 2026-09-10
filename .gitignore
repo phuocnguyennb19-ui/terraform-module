@@ -9,6 +9,15 @@
 tfplan
 tfplan.json
 tfplan-*
+*.tfplan
+*.tfplan.json
+
+# The root reads config.yaml and backend.hcl copied in from the values
+# repository (terraform-aws-platform). One environment's settings committed here
+# would be living in the shared library.
+/config.yaml
+/config.yml
+/backend.hcl
 
 # Logs
 *.log

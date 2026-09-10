@@ -1,21 +1,38 @@
 # terraform-module
 
-A library of reusable AWS Terraform modules. Nothing here deploys anything on its
-own: there is no root composition, no environment directory and no state backend.
-Each module takes typed Terraform inputs, returns outputs, and is consumed by a
-configuration that lives somewhere else.
+Reusable AWS Terraform modules under `modules/`, plus the **root composition** at
+the repository root (`main.tf`, `locals.tf`, …) that wires them together from a
+single YAML config. No environment lives here: there are no values, no
+environment directories and no committed backend settings.
 
-The consumer in this workspace is
-[`terraform-aws-platform`](../terraform-aws-platform), which holds the values,
-the environments and the state.
+Values and state locations belong to
+[`terraform-aws-platform`](../terraform-aws-platform). It clones this repository
+at a pinned tag, copies one environment's `config.yaml` and `backend.hcl` into
+the clone, and runs Terraform from this root.
 
 ```
-terraform-module          this repo — modules, typed inputs, no state
+terraform-module          this repo — modules/ + the root that composes them
         ▲
-        │  source = "git::…//modules/<name>?ref=v1.0.0"
+        │  git clone --branch <tag>; config.yaml + backend.hcl copied in
         │
-terraform-aws-platform    values, environments, backends, apply
+terraform-aws-platform    values (config.yaml) and backends, per environment
 ```
+
+## Running the root
+
+Terraform must run from this repository's root: `locals.tf` reads the config as
+`file("${path.cwd}/${var.config_file}")`, relative to the directory Terraform
+runs from. `terraform-aws-platform`'s `make init` / `make plan` do this for you;
+by hand it is:
+
+```bash
+cp ../terraform-aws-platform/environments/dev/config.yaml config.yaml
+cp ../terraform-aws-platform/environments/dev/backend.hcl backend.hcl
+terraform init -reconfigure -backend-config=backend.hcl
+terraform plan -var config_file=config.yaml
+```
+
+`config.yaml` and `backend.hcl` are gitignored here.
 
 ## Usage
 
@@ -89,17 +106,22 @@ major of every one of those modules — a coordinated upgrade, not a version bum
   never calls `yamldecode`. Whoever calls it decides where values come from.
 - **No `depends_on` between modules.** Ordering is expressed by one module's
   output feeding another's input, so Terraform derives the graph itself.
-- **No provider blocks in modules.** The consumer configures the provider; a
-  module that declares one cannot be used twice in the same configuration.
+- **No provider blocks in modules.** The provider is configured once, in the
+  root's `providers.tf` (or by any other caller); a module that declares one
+  cannot be used twice in the same configuration.
 - **Optional inputs carry defaults.** If a module can pick a safe value, it does,
   so a caller writes only what is genuinely a decision.
 
 ## Validating a change
 
-`examples/complete` compiles every typed module against the working tree. It
-needs no AWS credentials and no state bucket:
+The root and `examples/complete` both compile against the working tree — the
+root sources `./modules/<name>`, the example `../../modules/<name>`. Neither
+needs AWS credentials or a state bucket:
 
 ```bash
+terraform init -backend=false
+terraform validate
+
 cd examples/complete
 terraform init -backend=false
 terraform validate
@@ -128,4 +150,4 @@ of those breaks a caller's plan.
   snippets above show, and `examples/complete` does not exercise them. Porting
   them is outstanding work.
 - `examples/complete` does not cover `ecs-cluster` or `ecs-service`; those are
-  exercised by the consuming platform repository's own root.
+  exercised by the root composition.
