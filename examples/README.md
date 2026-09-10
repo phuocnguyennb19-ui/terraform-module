@@ -15,14 +15,14 @@ Always pin a tag, never a branch: `?ref=v1.0.0`.
 | Module | Inputs | Required | |
 |---|---|---|---|
 | [`acm`](#acm) | 8 | 2 |  |
-| [`alb`](#alb) | 25 | 4 |  |
+| [`alb`](#alb) | 26 | 4 |  |
 | [`cloudwatch`](#cloudwatch) | 10 | 1 |  |
 | [`dynamodb`](#dynamodb) | 4 | 1 | legacy YAML interface |
 | [`ec2`](#ec2) | 7 | 2 |  |
 | [`ecr`](#ecr) | 5 | 1 |  |
 | [`ecs-cluster`](#ecs-cluster) | 14 | 1 |  |
 | [`ecs-service`](#ecs-service) | 41 | 5 |  |
-| [`eks`](#eks) | 22 | 4 |  |
+| [`eks`](#eks) | 23 | 4 |  |
 | [`elasticache`](#elasticache) | 27 | 3 |  |
 | [`iam`](#iam) | 12 | 1 |  |
 | [`kms`](#kms) | 3 | 1 |  |

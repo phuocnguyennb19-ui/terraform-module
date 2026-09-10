@@ -10,6 +10,13 @@
 # node group and access entry inputs — a coordinated upgrade, not a bump.
 
 locals {
+  # Decided from a plain bool when the caller supplies one. Inferring it from
+  # kms_key_arn == null fails at plan whenever the key is built in the same
+  # configuration: the ARN is unknown until apply, so the count of the upstream
+  # KMS submodule is unknown too. Null keeps the old inference for callers that
+  # pass a literal ARN.
+  create_kms_key = var.create_kms_key != null ? var.create_kms_key : var.kms_key_arn == null
+
   # Managed node groups need a launch template to enforce IMDSv2 and encrypt the
   # root volume; the module builds one when given these settings.
   node_group_defaults = {
@@ -29,6 +36,11 @@ locals {
     enable_monitoring = true
 
     iam_role_attach_cni_policy = true
+
+    # A fixed role name rather than a name_prefix. AWS caps name_prefix at 38
+    # characters, and the upstream role name is "<cluster>-<group>-eks-node-group"
+    # — "platform-dev-eks-general" already overflows it. A full name has 64.
+    iam_role_use_name_prefix = false
   }
 
   node_groups = {
@@ -95,13 +107,13 @@ module "eks" {
   # ---- Encryption ---------------------------------------------------------
   # Envelope encryption for Kubernetes Secrets. Without it, a Secret in etcd is
   # base64, which is an encoding, not a protection.
-  create_kms_key = var.kms_key_arn == null
+  create_kms_key = local.create_kms_key
 
   # merge() rather than a conditional: the two branches of a conditional must
   # have identical object types, and provider_key_arn is present in only one.
   cluster_encryption_config = merge(
     { resources = ["secrets"] },
-    var.kms_key_arn != null ? { provider_key_arn = var.kms_key_arn } : {},
+    local.create_kms_key ? {} : { provider_key_arn = var.kms_key_arn },
   )
 
   # ---- Control plane logging ---------------------------------------------

@@ -11,7 +11,11 @@
 # have to care.
 
 locals {
-  https_enabled = var.certificate_arn != null
+  # Decided from a plain bool when the caller supplies one. Inferring it from
+  # certificate_arn != null fails at plan whenever the certificate is issued in
+  # the same configuration: the ARN is unknown until apply, so the listener map
+  # keys are unknown too. Null keeps the old inference for a literal ARN.
+  https_enabled = var.enable_https != null ? var.enable_https : var.certificate_arn != null
 
   # A default action is mandatory on a listener. When no default target group is
   # named, fall back to the first target group by key order so the listener is

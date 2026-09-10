@@ -147,6 +147,12 @@ variable "kms_key_arn" {
   default     = null
 }
 
+variable "create_kms_key" {
+  description = "Whether the EKS module creates its own Secrets encryption key. Set it explicitly — false alongside kms_key_arn — whenever that ARN is built in the same configuration: it is unknown at plan, and inferring this from it fails the plan. Null infers it from kms_key_arn == null."
+  type        = bool
+  default     = null
+}
+
 variable "cluster_enabled_log_types" {
   description = "Control plane logs published to CloudWatch. \"audit\" is the one that answers \"who did this to the cluster\" — dropping it to save money removes the only record."
   type        = list(string)

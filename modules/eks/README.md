@@ -15,7 +15,7 @@ module "eks" {
 }
 ```
 
-Every input not listed above has a default — 18 of them. See `variables.tf`.
+Every input not listed above has a default — 19 of them. See `variables.tf`.
 
 ## Required inputs
 

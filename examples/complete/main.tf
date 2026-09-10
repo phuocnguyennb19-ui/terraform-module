@@ -454,6 +454,8 @@ module "alb" {
   security_group_ids = [module.security_groups.alb_sg_id]
   internal           = var.alb_internal
 
+  # enable_https mirrors the acm count: the ARN itself is unknown until apply.
+  enable_https    = var.enable_acm && var.enable_route53
   certificate_arn = one(module.acm[*].certificate_arn)
 
   target_groups = {
@@ -505,6 +507,7 @@ module "eks" {
 
   node_groups = var.eks_node_groups
 
+  create_kms_key             = false
   kms_key_arn                = module.kms.key_arns["eks"]
   cluster_log_kms_key_arn    = module.kms.key_arns["logs"]
   cluster_log_retention_days = local.hardened.log_retention_days

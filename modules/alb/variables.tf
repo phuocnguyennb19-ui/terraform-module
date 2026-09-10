@@ -40,6 +40,12 @@ variable "certificate_arn" {
   default     = null
 }
 
+variable "enable_https" {
+  description = "Create the HTTPS listener. Set it explicitly — true alongside certificate_arn — whenever that certificate is issued in the same configuration: its ARN is unknown at plan, and inferring this from it fails the plan. Null infers it from certificate_arn != null."
+  type        = bool
+  default     = null
+}
+
 variable "additional_certificate_arns" {
   description = "Extra certificates attached to the HTTPS listener via SNI, for serving multiple domains from one ALB."
   type        = list(string)

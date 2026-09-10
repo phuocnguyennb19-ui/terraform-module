@@ -15,7 +15,7 @@ module "alb" {
 }
 ```
 
-Every input not listed above has a default — 21 of them. See `variables.tf`.
+Every input not listed above has a default — 22 of them. See `variables.tf`.
 
 ## Required inputs
 

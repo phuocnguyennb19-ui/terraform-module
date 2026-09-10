@@ -46,13 +46,13 @@ through `global_config`; they are marked below and are not the pattern to copy.
 | Module | Inputs | Required | Upstream |
 |---|---|---|---|
 | `acm` | 8 | 2 | `terraform-aws-modules/acm/aws` 5.2.0 |
-| `alb` | 25 | 4 | `terraform-aws-modules/alb/aws` 9.17.0 |
+| `alb` | 26 | 4 | `terraform-aws-modules/alb/aws` 9.17.0 |
 | `cloudwatch` | 10 | 1 | `hashicorp/aws` resources |
 | `ec2` | 7 | 2 | `terraform-aws-modules/ec2-instance/aws` 5.8.0 |
 | `ecr` | 5 | 1 | `hashicorp/aws` resources |
 | `ecs-cluster` | 14 | 1 | `terraform-aws-modules/ecs/aws//modules/cluster` 5.11.4 |
 | `ecs-service` | 41 | 5 | `terraform-aws-modules/ecs/aws//modules/service` 5.11.4 |
-| `eks` | 22 | 4 | `terraform-aws-modules/eks/aws` 20.37.2 |
+| `eks` | 23 | 4 | `terraform-aws-modules/eks/aws` 20.37.2 |
 | `elasticache` | 27 | 3 | `hashicorp/aws` resources |
 | `iam` | 12 | 1 | `hashicorp/aws` resources |
 | `kms` | 3 | 1 | `hashicorp/aws` resources |
