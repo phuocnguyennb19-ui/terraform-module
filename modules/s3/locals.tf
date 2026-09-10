@@ -1,12 +1,9 @@
 locals {
-
-  # 2. Local Module Config (Support dynamic config file name)
   config_local = merge(
     try(yamldecode(file("${path.cwd}/${var.config_file}")), {}),
     var.manual_config
   )
 
-  # 3. Context & Naming (Strict mapping from config.yml)
   env          = lookup(var.global_config, "environment", "dev")
   region       = lookup(var.global_config, "region", "ap-southeast-1")
   project      = lookup(var.global_config, "project", "core")
@@ -14,7 +11,6 @@ locals {
   service_type = lookup(local.config_local, "service_type", "infra")
   name_prefix  = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
 
-  # 4. Smart Defaults for s3
   raw_s3_cfg = try(local.config_local.s3, {})
   s3_defaults = {
     bucket              = "${local.name_prefix}-bucket"
@@ -36,9 +32,6 @@ locals {
     replication_configuration   = lookup(local.raw_s3_cfg, "replication_configuration", {})
     notification_configurations = lookup(local.raw_s3_cfg, "notification_configurations", {})
 
-    # full upstream surface
-    # Remaining upstream arguments with a simple literal default, mapped with
-    # that same default as the fallback: omitting a key behaves as before.
     access_log_delivery_policy_source_accounts = try(local.raw_s3_cfg.access_log_delivery_policy_source_accounts, [])
     access_log_delivery_policy_source_buckets  = try(local.raw_s3_cfg.access_log_delivery_policy_source_buckets, [])
     allowed_kms_key_arn                        = try(local.raw_s3_cfg.allowed_kms_key_arn, null)
@@ -74,7 +67,6 @@ locals {
   }
   s3_config = merge(local.s3_defaults, try(local.config_local.s3, {}))
 
-  # 5. Global Alias & Tags
   config = local.config_local
   tags = merge(
     {

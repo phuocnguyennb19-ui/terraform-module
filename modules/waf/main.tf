@@ -16,14 +16,9 @@ module "wafv2" {
     sampled_requests_enabled   = true
   }
 
-  # terraform-aws-wafv2 v1.1.0 has no `logging_configuration` argument. It exposes
-  # create_logging_configuration / logging_log_destination_configs / logging_filter /
-  # logging_redacted_fields instead. Wire those explicitly when WAF logging is needed.
-
   tags = local.tags
 }
 
-# Associate WAF with ALB(s) if ARNs provided
 resource "aws_wafv2_web_acl_association" "this" {
   for_each = toset(local.waf_config.associate_alb_arns)
 

@@ -1,12 +1,3 @@
-# EC2 INSTANCES
-#
-# Placed into subnets and security groups the foundation already created. There
-# is no aws_vpc, no aws_subnet and no aws_security_group in this module.
-#
-# Upstream: terraform-aws-modules/ec2-instance/aws v5, iterated with for_each so
-# one module block can describe a heterogeneous set of instances rather than n
-# identical ones.
-
 data "aws_ami" "al2023" {
   count = length([for k, i in var.instances : k if i.ami_id == null]) > 0 ? 1 : 0
 
@@ -44,24 +35,16 @@ module "instance" {
   ami           = coalesce(each.value.ami_id, local.default_ami_id)
   instance_type = each.value.instance_type
 
-  # ---- Networking, from the foundation ------------------------------------
   subnet_id                   = each.value.subnet_id
   vpc_security_group_ids      = var.security_group_ids
   associate_public_ip_address = each.value.associate_public_ip_address
   availability_zone           = each.value.availability_zone
 
-  # ---- Identity -----------------------------------------------------------
-  # The profile is created by the iam module; this module never creates one, so
-  # the permissions an instance holds are described in a single place.
   create_iam_instance_profile = false
   iam_instance_profile        = var.iam_instance_profile
 
   key_name = each.value.key_name
 
-  # ---- Metadata service ---------------------------------------------------
-  # IMDSv2 required. IMDSv1 answers an unauthenticated GET, which is what turns
-  # a server-side request forgery bug in the application into instance
-  # credentials for the attacker.
   metadata_options = {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -69,7 +52,6 @@ module "instance" {
     instance_metadata_tags      = "disabled"
   }
 
-  # ---- Storage ------------------------------------------------------------
   root_block_device = [{
     encrypted             = true
     kms_key_id            = var.kms_key_arn
@@ -94,7 +76,6 @@ module "instance" {
     }
   ]
 
-  # ---- Behaviour ----------------------------------------------------------
   monitoring                           = each.value.monitoring
   ebs_optimized                        = each.value.ebs_optimized
   disable_api_termination              = coalesce(each.value.disable_api_termination, var.enable_termination_protection_default)

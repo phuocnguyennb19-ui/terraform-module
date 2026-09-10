@@ -1,14 +1,3 @@
-# ===========================================================================
-# ALARM DEFINITIONS
-#
-# Declared unconditionally here and filtered where they are consumed in main.tf.
-# Every one publishes to the cloudwatch module's SNS topic on both ALARM and OK,
-# so a recovery is as visible as a failure.
-#
-# An alarm with no owner is noise. These are the ones that mean "a human must
-# look now"; anything that is merely interesting belongs on a dashboard.
-# ===========================================================================
-
 locals {
   ecs_cluster_name = local.enabled.ecs_cluster ? "${local.name_prefix}-ecs" : try(local.existing.ecs_cluster.name, null)
 
@@ -24,8 +13,6 @@ locals {
       severity            = "warning"
     }
 
-    # 10 GiB in bytes. Storage autoscaling should act first; this fires when it
-    # has not, which is the point at which the database is minutes from read-only.
     rds-free-storage = {
       alarm_description   = "RDS free storage below 10 GiB on ${local.name_prefix}"
       namespace           = "AWS/RDS"
@@ -50,9 +37,6 @@ locals {
   }
 
   alb_alarms = {
-    # ELB_5XX, not TARGET_5XX: this counts errors the load balancer generated
-    # itself — no healthy target, or a target that never answered — rather than
-    # errors the application returned deliberately.
     alb-5xx = {
       alarm_description   = "ALB returning 5xx from its own layer on ${local.name_prefix}"
       namespace           = "AWS/ApplicationELB"
@@ -119,27 +103,7 @@ locals {
     }
   }
 
-  # ---- ECS ----------------------------------------------------------------
-  #
-  # Two alarms per service, and they answer different questions:
-  #
-  #   running-tasks — is the service actually running what it should be? This is
-  #     the one that catches a task that cannot start at all: a bad image, a
-  #     secret the execution role cannot read, a subnet with no route to ECR.
-  #     Circuit breaker rolls a DEPLOYMENT back; nothing rolls back a task that
-  #     starts crashing an hour later.
-  #
-  #   cpu — is it saturated? Only meaningful above the autoscaling target, which
-  #     is why the threshold is 85 and not 70: at 70 the scaling policy is
-  #     already acting, and alarming there pages a human to watch autoscaling
-  #     work.
-  #
-  # Both are per service, keyed so the alarm name says which service broke.
-  #
-  # Built with concat([{}], ...) and a filtered for-expression rather than a
-  # ternary: merge() with zero arguments is an error when there are no services,
-  # and a ternary would have to unify the type of "{}" with the type of a map of
-  # alarm objects, which Terraform refuses.
+  # concat([{}], ...) keeps merge() valid when there are no services.
   ecs_alarms = merge(concat([{}], [
     for k, svc in local.ecs_services : {
       "ecs-${k}-running-tasks" = {
@@ -154,10 +118,8 @@ locals {
         threshold           = max(try(svc.autoscaling.min, 2), local.hardened.ecs_min_tasks)
         comparison_operator = "LessThanThreshold"
         evaluation_periods  = 2
-        # "missing" rather than notBreaching: no data from a service that should
-        # be reporting is itself the failure, not an absence of one.
-        treat_missing_data = "missing"
-        severity           = "critical"
+        treat_missing_data  = "missing"
+        severity            = "critical"
       }
 
       "ecs-${k}-cpu" = {

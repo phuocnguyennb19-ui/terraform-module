@@ -9,10 +9,6 @@ variable "tags" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# Alarm destination
-# ---------------------------------------------------------------------------
-
 variable "create_sns_topic" {
   description = <<-EOT
     Create the SNS topic every alarm publishes to.
@@ -62,10 +58,6 @@ variable "sns_subscriptions" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Log groups
-# ---------------------------------------------------------------------------
-
 variable "log_groups" {
   description = <<-EOT
     CloudWatch log groups, keyed by a short name. `name` is the full log group
@@ -98,10 +90,6 @@ variable "default_log_kms_key_arn" {
   type        = string
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Alarms
-# ---------------------------------------------------------------------------
 
 variable "metric_alarms" {
   description = <<-EOT

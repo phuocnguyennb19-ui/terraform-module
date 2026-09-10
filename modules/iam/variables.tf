@@ -15,10 +15,6 @@ variable "tags" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# EC2 instance role
-# ---------------------------------------------------------------------------
-
 variable "create_ec2_instance_role" {
   description = "Create the EC2 instance role and instance profile consumed by the ec2 module."
   type        = bool
@@ -61,19 +57,11 @@ variable "ec2_additional_policy_arns" {
   default     = []
 }
 
-# ---------------------------------------------------------------------------
-# RDS enhanced monitoring role
-# ---------------------------------------------------------------------------
-
 variable "create_rds_monitoring_role" {
   description = "Create the role RDS Enhanced Monitoring assumes to publish OS-level metrics. Required whenever the rds module sets monitoring_interval > 0."
   type        = bool
   default     = true
 }
-
-# ---------------------------------------------------------------------------
-# Arbitrary additional roles
-# ---------------------------------------------------------------------------
 
 variable "additional_roles" {
   description = <<-EOT

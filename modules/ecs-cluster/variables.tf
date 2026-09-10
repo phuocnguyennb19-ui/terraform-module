@@ -1,7 +1,3 @@
-# ---------------------------------------------------------------------------
-# Identity
-# ---------------------------------------------------------------------------
-
 variable "cluster_name" {
   description = "ECS cluster name, conventionally \"<project>-<environment>-ecs\"."
   type        = string
@@ -17,16 +13,6 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
-# ---------------------------------------------------------------------------
-# Capacity
-#
-# Fargate only. There is deliberately no EC2 capacity provider input here: an
-# EC2-backed cluster brings an autoscaling group, an AMI lifecycle, node draining
-# and a patching story with it, and none of that belongs behind a boolean. If a
-# workload genuinely needs EC2 capacity, that is a separate module and a separate
-# decision — see modules/ec2 and modules/eks for what this platform already has.
-# ---------------------------------------------------------------------------
 
 variable "fargate_base" {
   description = "Tasks placed on on-demand FARGATE before the weighted split starts. This is the floor that survives a Spot capacity shortage, so it is the number that decides whether a Spot interruption is a blip or an outage."
@@ -50,10 +36,6 @@ variable "fargate_spot_weight" {
   type        = number
   default     = 0
 }
-
-# ---------------------------------------------------------------------------
-# Observability
-# ---------------------------------------------------------------------------
 
 variable "container_insights" {
   description = "Enable CloudWatch Container Insights. This is the only source of per-task CPU, memory and network metrics; without it the cluster reports service-level counts and nothing about what the tasks are doing. It is billed per metric."
@@ -79,14 +61,6 @@ variable "execute_command_kms_key_arn" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# Shared task execution role
-#
-# The cluster-level execution role is the one ECS itself assumes to pull images
-# and write logs BEFORE the container starts. It is not the task role — the
-# application's own AWS permissions belong to the service, not here.
-# ---------------------------------------------------------------------------
-
 variable "create_task_exec_iam_role" {
   description = "Create a cluster-wide task execution role. Leave false when each service creates its own, which is the narrower default."
   type        = bool
@@ -110,10 +84,6 @@ variable "task_exec_ssm_param_arns" {
   type        = list(string)
   default     = []
 }
-
-# ---------------------------------------------------------------------------
-# Service Connect
-# ---------------------------------------------------------------------------
 
 variable "service_connect_namespace" {
   description = "Cloud Map namespace ARN used as the default for ECS Service Connect. Null disables the default; a service can still opt in with its own namespace."

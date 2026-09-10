@@ -1,41 +1,4 @@
-# ===========================================================================
-# LIBRARY COMPOSITION — config.yaml mapped onto modules
-#
-# Every block below is gated by its own `enabled:` flag in the config, so one
-# root serves both shapes of stack:
-#
-#   base config      — kms, vpc, security_groups, iam, cloudwatch, ecr, alb,
-#                      ecs_cluster enabled. Owns the shared infrastructure.
-#   application config — all of the above disabled, `existing:` naming the base
-#                      stack's resources, `ecs_services:` describing the app.
-#
-# Dependency order is expressed entirely through module outputs feeding module
-# inputs. There is not one depends_on in this file: Terraform derives the graph
-# from the references themselves, and an explicit depends_on would only
-# serialise things that could otherwise run in parallel.
-#
-#   kms ──┐
-#         ├──▶ vpc ──┬──▶ security_groups ──┬──▶ alb ──▶ route53 (alias record)
-#   iam ──┘          │                      ├──▶ ecs_cluster ──▶ ecs_service
-#                    │                      ├──▶ eks
-#                    │                      ├──▶ ec2
-#                    │                      ├──▶ rds
-#                    │                      ├──▶ elasticache
-#                    │                      └──▶ lambda
-#                    │
-#   route53 (zone) ──▶ acm ──▶ alb ──▶ aws_route53_record.app (alias)
-#
-# The alias record is a bare resource rather than an input to the route53 module
-# on purpose. Routing it through the module would make route53 depend on alb,
-# while alb already depends on acm which depends on route53's zone id — a cycle
-# Terraform rejects outright. Splitting "own the zone" from "write one record
-# into it" is what breaks it.
-# ===========================================================================
-
 locals {
-  # The default key set. One key per purpose rather than one key for everything:
-  # a key policy is the only place you can say "the RDS service may use this and
-  # nothing else", and a single shared key collapses that distinction.
   default_kms_keys = {
     ebs = {
       description        = "EBS volume encryption for ${local.name_prefix}"
@@ -63,8 +26,6 @@ locals {
     }
   }
 
-  # Null when the key does not exist in this stack, which is what every module
-  # takes as "use the AWS-managed service key".
   kms = {
     ebs     = try(local.kms_key_arns["ebs"], null)
     rds     = try(local.kms_key_arns["rds"], null)
@@ -74,10 +35,6 @@ locals {
     ecr     = try(local.kms_key_arns["ecr"], null)
   }
 }
-
-# ===========================================================================
-# FOUNDATION
-# ===========================================================================
 
 module "kms" {
   source = "./modules/kms"
@@ -116,9 +73,6 @@ module "vpc" {
   enable_s3_gateway_endpoint       = try(local.config.vpc.enable_s3_gateway_endpoint, true)
   enable_dynamodb_gateway_endpoint = try(local.config.vpc.enable_dynamodb_gateway_endpoint, false)
 
-  # No security group is passed: the vpc module creates its own for the
-  # endpoints. Taking one from the security-groups module would be a cycle,
-  # since that module needs vpc_id from here.
   interface_endpoints = try(local.config.vpc.interface_endpoints, [])
 
   eks_cluster_names = local.eks_cluster_names
@@ -126,8 +80,6 @@ module "vpc" {
   tags = local.common_tags
 }
 
-# Every workload takes its security group from here rather than creating one,
-# so the tier-to-tier rules live in a single readable place.
 module "security_groups" {
   source = "./modules/security-groups"
   count  = local.enabled.security_groups ? 1 : 0
@@ -168,8 +120,7 @@ module "iam" {
   create_ec2_instance_role   = local.enabled.ec2
   create_rds_monitoring_role = local.enabled.rds
 
-  # Iterating the module rather than indexing it: module.ecr[0] is an error when
-  # ecr is disabled, and a conditional does not reliably guard against it.
+  # Iterate module.ecr rather than index it: module.ecr[0] errors when ecr is disabled.
   ec2_ecr_pull_repository_arns = flatten([for m in module.ecr : values(m.repository_arns)])
   ec2_kms_key_arns             = compact([local.kms.ebs])
 
@@ -177,10 +128,6 @@ module "iam" {
 
   tags = local.common_tags
 }
-
-# ===========================================================================
-# SHARED SERVICES
-# ===========================================================================
 
 module "cloudwatch" {
   source = "./modules/cloudwatch"
@@ -201,9 +148,7 @@ module "cloudwatch" {
     }
   }
 
-  # Filtered with for-expressions, not conditionals. Terraform requires both
-  # branches of a ternary to have the same object type, and "the RDS alarms" and
-  # "{}" never will — a for-expression with an `if` sidesteps that entirely.
+  # for-expressions, not ternaries: a ternary's branches must share one object type.
   metric_alarms = merge(
     { for k, v in local.rds_alarms : k => v if local.enabled.rds },
     { for k, v in local.alb_alarms : k => v if local.enabled.alb },
@@ -228,8 +173,6 @@ module "ecr" {
   tags = local.common_tags
 }
 
-# Composed before ACM: the certificate's DNS validation records are written into
-# this zone, so the zone ID has to exist first.
 module "route53" {
   source = "./modules/route53"
   count  = local.enabled.route53 ? 1 : 0
@@ -237,16 +180,12 @@ module "route53" {
   zone_name   = local.domain_name
   create_zone = try(local.config.route53.create_zone, false)
 
-  # Records are written below, not here — see the note in the header about the
-  # alb/acm/route53 cycle.
   records = try(local.config.route53.records, {})
 
   tags = local.common_tags
 }
 
-# An alias rather than a CNAME: it resolves at no charge, follows the load
-# balancer's addresses automatically, and is the only record type that can sit
-# on a zone apex.
+# Kept out of the route53 module: route53 -> acm -> alb -> this record would otherwise be a cycle.
 resource "aws_route53_record" "app" {
   count = local.enabled.route53 && local.enabled.alb ? 1 : 0
 
@@ -283,14 +222,10 @@ module "alb" {
   security_group_ids = [module.security_groups[0].alb_sg_id]
   internal           = try(local.config.alb.internal, false)
 
-  # enable_https mirrors the acm count above rather than testing the ARN, which
-  # is unknown until apply when the certificate is issued in this same stack.
+  # Mirrors the acm count: the certificate ARN is unknown until apply.
   enable_https    = local.enabled.acm && local.enabled.route53
   certificate_arn = one(module.acm[*].certificate_arn)
 
-  # target_type follows the compute in this stack: Fargate and the AWS Load
-  # Balancer Controller both register by IP, only an EC2 autoscaling group
-  # registers by instance.
   target_groups = {
     for k, t in try(local.config.alb.target_groups, { app = {} }) : k => {
       port             = try(t.port, local.application_port)
@@ -319,18 +254,6 @@ module "alb" {
 
   tags = local.common_tags
 }
-
-# ===========================================================================
-# WORKLOADS
-#
-# Every one of these takes vpc_id / subnet IDs / security group IDs as inputs.
-# None of them creates network infrastructure.
-# ===========================================================================
-
-# ---- ECS ------------------------------------------------------------------
-# The cluster is a scheduling boundary shared by every service in the
-# environment; the services are separate module instances so that adding one
-# does not touch the others' task definitions.
 
 module "ecs_cluster" {
   source = "./modules/ecs-cluster"
@@ -363,7 +286,6 @@ module "ecs_service" {
   subnet_ids         = local.private_subnet_ids
   security_group_ids = local.ecs_security_group_ids
 
-  # ---- Task definition ----------------------------------------------------
   cpu                  = try(each.value.cpu, 512)
   memory               = try(each.value.memory, 1024)
   cpu_architecture     = try(each.value.cpu_architecture, "X86_64")
@@ -375,7 +297,6 @@ module "ecs_service" {
   log_retention_days = local.hardened.log_retention_days
   log_kms_key_arn    = local.kms.logs
 
-  # ---- Service ------------------------------------------------------------
   desired_count = max(try(each.value.desired_count, 2), local.hardened.ecs_min_tasks)
 
   deployment_minimum_healthy_percent = try(each.value.deployment_minimum_healthy_percent, 100)
@@ -386,16 +307,11 @@ module "ecs_service" {
   platform_version                   = try(each.value.platform_version, "LATEST")
   capacity_provider_strategy         = try(each.value.capacity_provider_strategy, {})
 
-  # ---- Load balancer ------------------------------------------------------
-  # target_group_key indexes local.target_group_arns, which holds the groups
-  # this stack built AND the ones it looked up from the base stack. A service
-  # names a key; where the ALB lives is not its problem.
   target_group_arn                  = try(local.target_group_arns[each.value.target_group_key], null)
   load_balancer_container_name      = try(each.value.load_balancer_container, null)
   load_balancer_container_port      = try(each.value.load_balancer_port, null)
   health_check_grace_period_seconds = try(each.value.health_check_grace_period_seconds, 60)
 
-  # ---- Autoscaling --------------------------------------------------------
   enable_autoscaling         = try(each.value.autoscaling.enabled, true)
   autoscaling_min_capacity   = max(try(each.value.autoscaling.min, 2), local.hardened.ecs_min_tasks)
   autoscaling_max_capacity   = try(each.value.autoscaling.max, 10)
@@ -403,7 +319,6 @@ module "ecs_service" {
   autoscaling_memory_target  = try(each.value.autoscaling.memory_target, 70)
   autoscaling_policies_extra = try(each.value.autoscaling.policies, {})
 
-  # ---- IAM ----------------------------------------------------------------
   task_exec_iam_role_arn    = try(each.value.task_exec_iam_role_arn, null)
   task_exec_secret_arns     = try(each.value.task_exec_secret_arns, [])
   task_exec_ssm_param_arns  = try(each.value.task_exec_ssm_param_arns, [])
@@ -414,8 +329,6 @@ module "ecs_service" {
 
   tags = merge(local.common_tags, { Service = each.key })
 }
-
-# ---- EKS ------------------------------------------------------------------
 
 module "eks" {
   source = "./modules/eks"
@@ -436,8 +349,7 @@ module "eks" {
 
   node_groups = try(local.config.eks.node_groups, {})
 
-  # Whether an "eks" key exists is known at plan — the key set comes from the
-  # config — even though its ARN is not until apply.
+  # The key set is known at plan; the ARN is not.
   create_kms_key             = !contains(keys(local.kms_key_arns), "eks")
   kms_key_arn                = local.kms.eks
   cluster_log_kms_key_arn    = local.kms.logs
@@ -449,8 +361,6 @@ module "eks" {
   tags = local.common_tags
 }
 
-# ---- EC2 ------------------------------------------------------------------
-
 module "ec2" {
   source = "./modules/ec2"
   count  = local.enabled.ec2 ? 1 : 0
@@ -458,8 +368,6 @@ module "ec2" {
   name = local.name_prefix
 
   instances = {
-    # Resolved from the foundation. A config names an index, not a subnet ID
-    # that does not exist until the VPC is applied.
     for k, i in try(local.config.ec2.instances, {}) : k => {
       subnet_id = local.private_subnet_ids[
         try(i.subnet_index, 0) % length(local.private_subnet_ids)
@@ -481,8 +389,6 @@ module "ec2" {
   tags = local.common_tags
 }
 
-# ---- RDS ------------------------------------------------------------------
-
 module "rds" {
   source = "./modules/rds"
   count  = local.enabled.rds ? 1 : 0
@@ -502,9 +408,8 @@ module "rds" {
   max_allocated_storage = try(local.config.rds.max_allocated_storage, 200)
   kms_key_arn           = local.kms.rds
 
-  db_name  = try(local.config.rds.database_name, "appdb")
-  username = try(local.config.rds.username, "dbadmin")
-  # No password argument exists. AWS generates it into Secrets Manager.
+  db_name                        = try(local.config.rds.database_name, "appdb")
+  username                       = try(local.config.rds.username, "dbadmin")
   master_user_secret_kms_key_arn = local.kms.secrets
 
   multi_az                = local.hardened.rds_multi_az
@@ -520,8 +425,6 @@ module "rds" {
 
   tags = local.common_tags
 }
-
-# ---- ElastiCache ----------------------------------------------------------
 
 module "elasticache" {
   source = "./modules/elasticache"
@@ -550,8 +453,6 @@ module "elasticache" {
 
   tags = local.common_tags
 }
-
-# ---- Lambda ---------------------------------------------------------------
 
 module "lambda" {
   source = "./modules/lambda"

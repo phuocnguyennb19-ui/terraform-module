@@ -1,5 +1,3 @@
-# THE SERVICE CONTRACT
-
 output "id" {
   description = "Service ARN."
   value       = module.service.id
@@ -31,8 +29,6 @@ output "container_definitions" {
   sensitive   = true
 }
 
-# ---- IAM ------------------------------------------------------------------
-
 output "task_exec_iam_role_arn" {
   description = "Execution role ARN — what ECS assumes to pull the image and read secrets. Grant a secret's resource policy to THIS role, not the task role."
   value       = module.service.task_exec_iam_role_arn
@@ -52,8 +48,6 @@ output "tasks_iam_role_name" {
   description = "Task role name."
   value       = module.service.tasks_iam_role_name
 }
-
-# ---- Autoscaling ----------------------------------------------------------
 
 output "autoscaling_policy_arns" {
   description = "Map of scaling policy key to ARN. Empty when autoscaling is disabled."

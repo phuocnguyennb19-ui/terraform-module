@@ -41,10 +41,6 @@ variable "parameters" {
   default = []
 }
 
-# ---------------------------------------------------------------------------
-# Placement — from the foundation
-# ---------------------------------------------------------------------------
-
 variable "subnet_group_name" {
   description = "ElastiCache subnet group. From module.vpc.elasticache_subnet_group_name, which spans the database subnets — no internet route in either direction."
   type        = string
@@ -65,10 +61,6 @@ variable "port" {
   type        = number
   default     = 6379
 }
-
-# ---------------------------------------------------------------------------
-# Topology
-# ---------------------------------------------------------------------------
 
 variable "num_cache_clusters" {
   description = "Number of nodes in the replication group when cluster mode is off: one primary plus n-1 replicas. Needs at least 2 for automatic_failover_enabled to be meaningful."
@@ -106,10 +98,6 @@ variable "replicas_per_node_group" {
   default     = 1
 }
 
-# ---------------------------------------------------------------------------
-# Encryption
-# ---------------------------------------------------------------------------
-
 variable "at_rest_encryption_enabled" {
   description = "Encrypt data at rest. Cannot be changed after creation."
   type        = bool
@@ -141,10 +129,6 @@ variable "auth_token_secret_arn" {
   type        = string
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Backup, maintenance, logging
-# ---------------------------------------------------------------------------
 
 variable "snapshot_retention_limit" {
   description = "Days of automatic snapshots. 0 disables snapshots — acceptable for a pure cache, not for anything treated as a datastore."

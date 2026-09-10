@@ -1,31 +1,8 @@
-# IAM BASELINE
-#
-# The roles that exist because the platform exists, not because a particular
-# application does. Two of them, plus an escape hatch:
-#
-#   - the EC2 instance role, so instances can be managed by SSM and pull from
-#     the repositories they are told about, and nothing else
-#   - the RDS enhanced monitoring role, which RDS assumes to publish OS metrics
-#   - additional_roles, for CI and cross-account roles
-#
-# Deliberately not here: IRSA roles for EKS service accounts. Their trust policy
-# has to name the cluster's OIDC provider, so they belong with the eks module —
-# putting them here would make this module depend on a workload, which is
-# exactly the coupling the foundation/workload split exists to prevent.
-#
-# Every grant below is scoped to named resources. Where a list is empty the
-# statement is not emitted at all, so an unconfigured permission is absent
-# rather than wildcarded.
-
 data "aws_partition" "current" {}
 
 locals {
   managed_policy_prefix = "arn:${data.aws_partition.current.partition}:iam::aws:policy"
 }
-
-# ---------------------------------------------------------------------------
-# EC2 instance role
-# ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ec2_trust" {
   statement {
@@ -77,9 +54,6 @@ resource "aws_iam_role_policy_attachment" "ec2_managed" {
 data "aws_iam_policy_document" "ec2_inline" {
   count = var.create_ec2_instance_role ? 1 : 0
 
-  # ECR: the auth token call cannot be resource-scoped (AWS does not support it),
-  # so it is granted on "*" and the pull actions are scoped to named repositories.
-  # A token on its own grants nothing without the layer permissions below.
   dynamic "statement" {
     for_each = length(var.ec2_ecr_pull_repository_arns) > 0 ? [1] : []
 
@@ -143,8 +117,7 @@ data "aws_iam_policy_document" "ec2_inline" {
     }
   }
 
-  # An IAM policy document with no statements is invalid, so keep a harmless
-  # always-present statement. sts:GetCallerIdentity grants no access to anything.
+  # A policy document needs at least one statement; this one grants nothing.
   statement {
     sid       = "IdentitySelfCheck"
     effect    = "Allow"
@@ -160,10 +133,6 @@ resource "aws_iam_role_policy" "ec2_inline" {
   role   = aws_iam_role.ec2[0].id
   policy = data.aws_iam_policy_document.ec2_inline[0].json
 }
-
-# ---------------------------------------------------------------------------
-# RDS enhanced monitoring role
-# ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "rds_monitoring_trust" {
   statement {
@@ -194,10 +163,6 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
   role       = aws_iam_role.rds_monitoring[0].name
   policy_arn = "${local.managed_policy_prefix}/service-role/AmazonRDSEnhancedMonitoringRole"
 }
-
-# ---------------------------------------------------------------------------
-# Additional roles
-# ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "additional" {
   for_each = var.additional_roles

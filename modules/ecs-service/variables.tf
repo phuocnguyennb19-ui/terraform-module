@@ -1,7 +1,3 @@
-# ---------------------------------------------------------------------------
-# Identity and placement
-# ---------------------------------------------------------------------------
-
 variable "name" {
   description = "Service name, conventionally \"<project>-<environment>-<app>\". Also the task definition family."
   type        = string
@@ -42,14 +38,6 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
-# ---------------------------------------------------------------------------
-# Task definition — size
-#
-# Fargate accepts only fixed CPU values, each with its own memory range. An
-# invalid pair is rejected at apply time by the API, several minutes into a
-# deployment; the validation below moves that failure to plan time.
-# ---------------------------------------------------------------------------
 
 variable "cpu" {
   description = "Task CPU units. 1024 = 1 vCPU. Fargate accepts 256, 512, 1024, 2048, 4096, 8192 or 16384."
@@ -95,10 +83,6 @@ variable "cpu_architecture" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Task definition — containers
-# ---------------------------------------------------------------------------
-
 variable "containers" {
   description = <<-EOT
     Containers in the task, keyed by container name. Exactly one must be
@@ -118,12 +102,8 @@ variable "containers" {
     image     = string
     essential = optional(bool, true)
 
-    # Per-container reservation inside the task budget. Null lets the container
-    # use the whole task allocation, which is right for a single-container task.
-    cpu    = optional(number)
-    memory = optional(number)
-    # Soft limit. A container above its reservation is only reclaimed under
-    # contention, which is what you want for a bursty process.
+    cpu                = optional(number)
+    memory             = optional(number)
     memory_reservation = optional(number)
 
     command     = optional(list(string))
@@ -148,9 +128,6 @@ variable "containers" {
       valueFrom = string
     })), [])
 
-    # Container-level health check. Distinct from the ALB health check: this one
-    # decides whether ECS restarts the container, the ALB one decides whether
-    # traffic is sent to it. A service behind a load balancer wants both.
     health_check = optional(object({
       command     = list(string)
       interval    = optional(number, 30)
@@ -176,8 +153,6 @@ variable "containers" {
       hardLimit = number
     })), [])
 
-    # Overrides for the hardened defaults in locals.tf. Setting either of these
-    # is a decision to record, not a knob to turn to make a container start.
     readonly_root_filesystem = optional(bool)
     user                     = optional(string)
 
@@ -208,10 +183,6 @@ variable "volumes" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
 variable "log_retention_days" {
   description = "Retention for the container log groups this module creates."
   type        = number
@@ -223,10 +194,6 @@ variable "log_kms_key_arn" {
   type        = string
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 variable "desired_count" {
   description = "Tasks to run. Ignored after the first apply when autoscaling is enabled — the scaling policy owns the count from then on, and Terraform stops fighting it."
@@ -287,15 +254,6 @@ variable "capacity_provider_strategy" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# Load balancer
-#
-# The target group is created by the alb module and its ARN passed in. This
-# module does not create one: the ALB owns its listeners and target groups in a
-# single place, and a target group created here would be invisible to the
-# listener rules that route to it.
-# ---------------------------------------------------------------------------
-
 variable "target_group_arn" {
   description = "Target group to register tasks in. From module.alb.target_group_arns[\"<key>\"]. Must have target_type \"ip\" — Fargate tasks have no instance to register. Null runs the service with no load balancer, which is correct for a worker."
   type        = string
@@ -319,10 +277,6 @@ variable "health_check_grace_period_seconds" {
   type        = number
   default     = 60
 }
-
-# ---------------------------------------------------------------------------
-# Autoscaling
-# ---------------------------------------------------------------------------
 
 variable "enable_autoscaling" {
   description = "Register the service with Application Auto Scaling."
@@ -381,16 +335,6 @@ variable "autoscaling_policies_extra" {
   type        = any
   default     = {}
 }
-
-# ---------------------------------------------------------------------------
-# IAM
-#
-# Two distinct roles, routinely confused:
-#   execution role — assumed by the ECS agent BEFORE the container runs, to pull
-#                    the image and fetch secrets. Never the application's role.
-#   task role      — assumed by the application itself. This is where the
-#                    workload's own AWS permissions belong.
-# ---------------------------------------------------------------------------
 
 variable "task_exec_iam_role_arn" {
   description = "Existing execution role to reuse, e.g. the cluster-wide one. Null makes this module create a service-scoped role, which is the narrower default."

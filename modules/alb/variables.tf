@@ -133,10 +133,6 @@ variable "listener_rules" {
   default = {}
 }
 
-# ---------------------------------------------------------------------------
-# Access logs
-# ---------------------------------------------------------------------------
-
 variable "enable_access_logs" {
   description = "Write ALB access logs to S3. These are the only per-request record an ALB produces; without them a latency or 5xx investigation has nothing below the CloudWatch aggregate."
   type        = bool
@@ -166,10 +162,6 @@ variable "access_logs_prefix" {
   type        = string
   default     = "alb"
 }
-
-# ---------------------------------------------------------------------------
-# Safety and hardening
-# ---------------------------------------------------------------------------
 
 variable "enable_deletion_protection" {
   description = "Refuse to delete the load balancer until this is turned off. On in production: a `terraform destroy` aimed at the wrong workspace stops here."

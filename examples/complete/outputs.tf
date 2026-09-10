@@ -1,16 +1,3 @@
-# ===========================================================================
-# ENVIRONMENT OUTPUTS
-#
-# Identical in dev, staging and prod.
-#
-# Every workload output is wrapped with one(), which yields null rather than an
-# error when that workload is switched off. This is what lets a single set of
-# outputs describe every deployment scenario from "VPC only" to the full stack.
-#
-# Nothing here exposes a secret. The database password does not appear because
-# it does not exist in Terraform — see rds_master_user_secret_arn.
-# ===========================================================================
-
 output "environment" {
   description = "Environment name."
   value       = var.environment
@@ -40,10 +27,6 @@ output "enabled_workloads" {
     acm         = var.enable_acm
   }
 }
-
-# ---------------------------------------------------------------------------
-# Foundation
-# ---------------------------------------------------------------------------
 
 output "vpc_id" {
   description = "VPC ID."
@@ -95,10 +78,6 @@ output "ec2_instance_profile_name" {
   value       = module.iam.ec2_instance_profile_name
 }
 
-# ---------------------------------------------------------------------------
-# Shared services
-# ---------------------------------------------------------------------------
-
 output "alarm_topic_arn" {
   description = "SNS topic every CloudWatch alarm publishes to."
   value       = module.cloudwatch.sns_topic_arn
@@ -148,10 +127,6 @@ output "application_url" {
   description = "URL the application is published under, or null when DNS or the ALB is disabled."
   value       = local.app_fqdn != null && var.enable_alb ? "https://${local.app_fqdn}" : null
 }
-
-# ---------------------------------------------------------------------------
-# Workloads
-# ---------------------------------------------------------------------------
 
 output "eks_cluster_name" {
   description = "EKS cluster name, or null when EKS is disabled."

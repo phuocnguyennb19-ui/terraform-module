@@ -1,9 +1,3 @@
-# THE FOUNDATION CONTRACT
-#
-# Everything below is consumed by workload modules. Treat these output names as
-# a public API: renaming one is a breaking change for every environment root and
-# every downstream stack that reads this state.
-
 output "vpc_id" {
   description = "VPC ID. Consumed by security-groups, alb, eks, rds, elasticache and lambda."
   value       = module.vpc.vpc_id
@@ -23,8 +17,6 @@ output "azs" {
   description = "Availability zones the subnets were spread across, in order."
   value       = local.azs
 }
-
-# ---- Subnets --------------------------------------------------------------
 
 output "public_subnet_ids" {
   description = "Public subnet IDs, one per AZ. Internet-facing load balancers and NAT gateways only — never an instance or a database."
@@ -56,8 +48,6 @@ output "database_subnet_cidrs" {
   value       = module.vpc.database_subnets_cidr_blocks
 }
 
-# ---- Subnet groups --------------------------------------------------------
-
 output "database_subnet_group_name" {
   description = "RDS DB subnet group name. Passing this to the RDS module is what structurally prevents a database from being placed in a public subnet."
   value       = module.vpc.database_subnet_group_name
@@ -67,8 +57,6 @@ output "elasticache_subnet_group_name" {
   description = "ElastiCache subnet group name, or null when create_elasticache_subnet_group is false."
   value       = one(aws_elasticache_subnet_group.this[*].name)
 }
-
-# ---- Routing and gateways -------------------------------------------------
 
 output "internet_gateway_id" {
   description = "Internet gateway ID."
@@ -99,8 +87,6 @@ output "database_route_table_ids" {
   description = "Database route table IDs."
   value       = module.vpc.database_route_table_ids
 }
-
-# ---- Observability and endpoints -----------------------------------------
 
 output "default_security_group_id" {
   description = "The VPC's default security group. This module strips all of its rules; nothing should ever be attached to it."

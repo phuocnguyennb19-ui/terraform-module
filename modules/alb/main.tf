@@ -1,31 +1,12 @@
-# APPLICATION LOAD BALANCER
-#
-# Consumes the foundation and never creates network infrastructure: vpc_id,
-# subnet_ids and security_group_ids all arrive as inputs. Placing it in public
-# subnets makes it internet-facing; private subnets plus internal = true makes
-# it VPC-only. Either way the subnets came from the shared VPC.
-#
-# Upstream: terraform-aws-modules/alb/aws v9. Wrapped so the platform's
-# target_groups/listener_rules shape stays put across upstream major versions —
-# v8 and v9 have materially different listener schemas, and callers should not
-# have to care.
-
 locals {
-  # Decided from a plain bool when the caller supplies one. Inferring it from
-  # certificate_arn != null fails at plan whenever the certificate is issued in
-  # the same configuration: the ARN is unknown until apply, so the listener map
-  # keys are unknown too. Null keeps the old inference for a literal ARN.
+  # Explicit bool: certificate_arn is unknown at plan when ACM is built in the same stack.
   https_enabled = var.enable_https != null ? var.enable_https : var.certificate_arn != null
 
-  # A default action is mandatory on a listener. When no default target group is
-  # named, fall back to the first target group by key order so the listener is
-  # still valid; a caller with more than one group should set it explicitly.
   default_tg_key = coalesce(
     var.default_target_group_key,
     try(sort(keys(var.target_groups))[0], null),
   )
 
-  # ---- Target groups ------------------------------------------------------
   target_groups = {
     for k, tg in var.target_groups : k => {
       name             = substr("${var.name}-${k}", 0, 32)
@@ -56,16 +37,12 @@ locals {
         cookie_duration = tg.stickiness.cookie_duration
       }
 
-      # Targets are registered by whatever owns them — the AWS Load Balancer
-      # Controller for EKS, an autoscaling group's target_group_arns for EC2.
-      # This module creates the group and stops there.
       create_attachment = false
 
       tags = merge(var.tags, tg.tags)
     }
   }
 
-  # ---- Listener rules -----------------------------------------------------
   listener_rules = {
     for k, r in var.listener_rules : k => {
       priority = r.priority
@@ -86,22 +63,7 @@ locals {
     }
   }
 
-  # ---- Listeners ----------------------------------------------------------
-  # Port 80 carries a redirect and nothing else when a certificate exists. It
-  # only serves application traffic on an HTTP-only internal load balancer,
-  # which is the single case where that is defensible.
-  #
-  # Three states, not two:
-  #   certificate + redirect    -> 301 to 443, no application traffic on 80
-  #   certificate, no redirect  -> no port 80 listener at all
-  #   no certificate            -> port 80 forwards to the default target group
-  #
-  # Assembled by merge() from one base object rather than by a conditional
-  # between two shapes. A ternary has to unify the types of its branches, and
-  # "a listener that redirects" and "a listener that forwards" differ by exactly
-  # the attribute that makes them different — so a ternary between them is
-  # rejected outright, whichever way round it is written. Merging an empty map
-  # in is fine, because an empty object converts to anything.
+  # Listeners are built with merge(), not ternaries: redirect and forward objects differ in type.
   http_redirects = local.https_enabled && var.enable_http_redirect
 
   http_listener = local.https_enabled && !var.enable_http_redirect ? {} : {
@@ -120,9 +82,6 @@ locals {
       local.http_redirects ? {} : {
         forward = { target_group_key = local.default_tg_key }
       },
-      # Rules belong on the listener that actually serves the application. On a
-      # redirecting port 80 they would be evaluated before the 301 and quietly
-      # bypass HTTPS for whatever they matched.
       local.http_redirects || length(local.listener_rules) == 0 ? {} : {
         rules = local.listener_rules
       },
@@ -158,9 +117,6 @@ module "alb" {
   vpc_id  = var.vpc_id
   subnets = var.subnet_ids
 
-  # The security group is owned by the security-groups module, which is where
-  # the whole tier-to-tier rule set lives. Letting this module create its own
-  # would split that boundary across two places.
   create_security_group = false
   security_groups       = var.security_group_ids
 
@@ -179,7 +135,6 @@ module "alb" {
 
   target_groups = local.target_groups
 
-  # Rules are nested inside each listener in v9, not a top-level argument.
   listeners = local.listeners
 
   tags = var.tags

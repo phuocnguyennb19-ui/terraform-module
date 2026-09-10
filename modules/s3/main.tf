@@ -45,14 +45,9 @@ module "s3_bucket" {
   intelligent_tiering       = local.s3_config.intelligent_tiering
   metric_configuration      = local.s3_config.metric_configuration
   replication_configuration = local.s3_config.replication_configuration
-  # notification_configurations is NOT an argument of terraform-aws-s3-bucket v4.2.1
-  # (bucket notifications live in that repo's //modules/notification submodule).
-  # Passing it made this module fail `terraform validate` outright. The local is kept
-  # so the key can be re-wired if the module is ever pointed at the submodule.
 
   tags = local.tags
 
-  # full upstream surface
   access_log_delivery_policy_source_accounts = local.s3_config.access_log_delivery_policy_source_accounts
   access_log_delivery_policy_source_buckets  = local.s3_config.access_log_delivery_policy_source_buckets
   allowed_kms_key_arn                        = local.s3_config.allowed_kms_key_arn

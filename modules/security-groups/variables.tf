@@ -19,14 +19,6 @@ variable "tags" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# Which groups to create
-#
-# Each workload tier gets its own group even when nothing is attached to it yet,
-# because the rules between tiers are what encode the architecture. Turn one off
-# only when that tier will never exist in this environment.
-# ---------------------------------------------------------------------------
-
 variable "create_alb_sg" {
   description = "Create the ALB security group — the only tier that accepts traffic from outside the VPC."
   type        = bool
@@ -75,10 +67,6 @@ variable "create_bastion_sg" {
   default     = false
 }
 
-# ---------------------------------------------------------------------------
-# Ports
-# ---------------------------------------------------------------------------
-
 variable "application_port" {
   description = "Port the application listens on behind the ALB. Used for the ALB -> EC2 and ALB -> EKS node rules."
   type        = number
@@ -101,10 +89,6 @@ variable "cache_port" {
   type        = number
   default     = 6379
 }
-
-# ---------------------------------------------------------------------------
-# The only places a raw CIDR is accepted
-# ---------------------------------------------------------------------------
 
 variable "alb_ingress_cidrs" {
   description = "Source CIDRs allowed to reach the ALB. 0.0.0.0/0 is correct for an internet-facing ALB and wrong for an internal one — narrow it to the VPC or the corporate range when internal is true."
@@ -139,10 +123,6 @@ variable "eks_public_api_allowed_cidrs" {
     error_message = "eks_public_api_allowed_cidrs must not contain 0.0.0.0/0. Set cluster_endpoint_public_access = false on the eks module, or name the ranges that need it."
   }
 }
-
-# ---------------------------------------------------------------------------
-# Escape hatch
-# ---------------------------------------------------------------------------
 
 variable "additional_ingress_rules" {
   description = <<-EOT

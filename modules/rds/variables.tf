@@ -40,10 +40,6 @@ variable "instance_class" {
   default     = "db.t4g.medium"
 }
 
-# ---------------------------------------------------------------------------
-# Placement — always from the foundation
-# ---------------------------------------------------------------------------
-
 variable "db_subnet_group_name" {
   description = "DB subnet group. From module.vpc.database_subnet_group_name. Those subnets have no internet gateway route and no NAT route, so the database has no path to or from the internet regardless of what a security group says."
   type        = string
@@ -70,10 +66,6 @@ variable "port" {
   type        = number
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Storage and encryption
-# ---------------------------------------------------------------------------
 
 variable "allocated_storage" {
   description = "Initial storage in GiB."
@@ -105,15 +97,6 @@ variable "kms_key_arn" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# Credentials
-#
-# There is no password variable in this module, deliberately. A password passed
-# through Terraform ends up in the state file in plaintext, and the state file
-# outlives the apply. manage_master_user_password hands generation and rotation
-# to AWS Secrets Manager; Terraform never sees the value.
-# ---------------------------------------------------------------------------
-
 variable "db_name" {
   description = "Name of the initial database created inside the instance."
   type        = string
@@ -131,10 +114,6 @@ variable "master_user_secret_kms_key_arn" {
   type        = string
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Backup and retention
-# ---------------------------------------------------------------------------
 
 variable "backup_retention_period" {
   description = "Days of automated backups. 0 disables backups entirely and also disables point-in-time recovery — never correct outside a throwaway environment."
@@ -183,10 +162,6 @@ variable "delete_automated_backups" {
   default     = false
 }
 
-# ---------------------------------------------------------------------------
-# Monitoring
-# ---------------------------------------------------------------------------
-
 variable "monitoring_interval" {
   description = "Enhanced Monitoring granularity in seconds: 0, 1, 5, 10, 15, 30 or 60. 0 disables it. Anything other than 0 requires monitoring_role_arn."
   type        = number
@@ -233,10 +208,6 @@ variable "cloudwatch_log_group_retention_in_days" {
   type        = number
   default     = 30
 }
-
-# ---------------------------------------------------------------------------
-# Parameters and upgrades
-# ---------------------------------------------------------------------------
 
 variable "parameters" {
   description = "DB parameter group parameters. Null applies the module's engine defaults, which force TLS on connections."

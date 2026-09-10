@@ -1,21 +1,3 @@
-# ECR REPOSITORIES
-#
-# Written against the provider directly rather than wrapped around a community
-# module: the resource surface is three resources wide, and the lifecycle policy
-# is the only part with real content.
-#
-# The two defaults worth arguing about:
-#
-#   IMMUTABLE tags — a mutable tag means "app:v1.4.2" can point at different
-#   bytes tomorrow than it does today, which makes a rollback to a tag a guess.
-#   Set MUTABLE per repository only for something like a "latest" dev scratch
-#   repository where that is the intent.
-#
-#   Lifecycle expiry — ECR bills for storage and every CI run adds a layer. The
-#   policy below expires untagged images quickly and caps the number of tagged
-#   ones. Rules run in priority order and the FIRST match wins, so the untagged
-#   rule is evaluated before the tagged-count rule.
-
 locals {
   repository_names = {
     for k, v in var.repositories : k => var.use_name_prefix ? "${var.name}/${k}" : k
@@ -74,9 +56,6 @@ resource "aws_ecr_lifecycle_policy" "this" {
   })
 }
 
-# Cross-account or cross-role pull access. Omitted entirely when no principal is
-# named, so a repository without an explicit grant is reachable only through IAM
-# in the owning account.
 data "aws_iam_policy_document" "pull" {
   for_each = { for k, v in var.repositories : k => v if length(v.pull_principal_arns) > 0 }
 

@@ -13,12 +13,10 @@ module "sqs" {
   delay_seconds              = lookup(each.value, "delay_seconds", 0)
   receive_wait_time_seconds  = lookup(each.value, "receive_wait_time_seconds", 0)
 
-  # Encryption at rest
   kms_master_key_id                 = lookup(each.value, "kms_master_key_id", null)
   kms_data_key_reuse_period_seconds = lookup(each.value, "kms_data_key_reuse_period_seconds", 300)
   sqs_managed_sse_enabled           = lookup(each.value, "kms_master_key_id", null) == null
 
-  # Dead Letter Queue
   redrive_policy       = lookup(each.value, "redrive_policy", {})
   redrive_allow_policy = lookup(each.value, "redrive_allow_policy", {})
 

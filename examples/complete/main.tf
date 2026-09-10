@@ -1,31 +1,3 @@
-# ===========================================================================
-# ENVIRONMENT COMPOSITION
-#
-# Identical in dev, staging and prod. Only terraform.tfvars and backend.hcl
-# differ; `make env-drift` fails if that stops being true.
-#
-# Dependency order is expressed entirely through module outputs feeding module
-# inputs. There is not one depends_on in this file: Terraform derives the graph
-# from the references themselves, and an explicit depends_on here would only
-# serialise things that could otherwise run in parallel.
-#
-#   kms ──┐
-#         ├──▶ vpc ──┬──▶ security_groups ──┬──▶ alb ──▶ route53 (alias record)
-#   iam ──┘          │                      ├──▶ eks
-#                    │                      ├──▶ ec2
-#                    │                      ├──▶ rds
-#                    │                      ├──▶ elasticache
-#                    │                      └──▶ lambda
-#                    │
-#   route53 (zone) ──▶ acm ──▶ alb ──▶ aws_route53_record.app (alias)
-#
-# The alias record is a bare resource here rather than an input to the route53
-# module on purpose. Routing it through the module would make route53 depend on
-# alb, while alb already depends on acm which depends on route53's zone id — a
-# cycle Terraform rejects outright. Splitting "own the zone" from "write one
-# record into it" is what breaks it.
-# ===========================================================================
-
 locals {
   name_prefix = "${var.project}-${var.environment}"
   is_prod     = var.environment == "prod"
@@ -42,23 +14,6 @@ locals {
     var.additional_tags,
   )
 
-  # -------------------------------------------------------------------------
-  # Production hardening floor
-  #
-  # Production does not get to opt out of these from a tfvars file. A control
-  # that can be switched off by editing a values file is a control that will
-  # eventually be switched off by accident, in a hurry, by someone chasing an
-  # unrelated failure. Raising a value above the floor is still allowed; going
-  # below it is not expressible.
-  #
-  # Each line names what it protects:
-  #   multi_az / one NAT per AZ  — an AZ failure is a failover, not an outage
-  #   deletion_protection        — a mistargeted destroy stops at the database
-  #   skip_final_snapshot=false  — deletion leaves a restorable copy behind
-  #   backup retention >= 30d    — a corruption found in week three is still recoverable
-  #   flow logs                  — the only record of who talked to what
-  #   private EKS API            — the control plane is not on the internet
-  # -------------------------------------------------------------------------
   hardened = {
     single_nat_gateway      = local.is_prod ? false : var.single_nat_gateway
     enable_flow_logs        = local.is_prod ? true : var.enable_flow_logs
@@ -81,13 +36,9 @@ locals {
     ec2_termination_protection = local.is_prod
   }
 
-  # An EKS cluster in this VPC needs its discovery tags on the subnets. The name
-  # is derived rather than taken from the eks module, which would be a cycle:
-  # the VPC has to exist before the cluster that tags it.
   eks_cluster_name  = "${local.name_prefix}-eks"
   eks_cluster_names = var.enable_eks ? [local.eks_cluster_name] : []
 
-  # The fully qualified name the ALB is published under.
   app_fqdn = var.enable_route53 && var.domain_name != null ? (
     var.app_hostname != null ? "${var.app_hostname}.${var.domain_name}" : var.domain_name
   ) : null
@@ -95,12 +46,6 @@ locals {
   rds_port   = var.rds_engine == "postgres" ? 5432 : 3306
   cache_port = 6379
 
-  # -------------------------------------------------------------------------
-  # Alarm definitions
-  #
-  # Declared unconditionally and filtered where they are consumed. Every one of
-  # them publishes to the module's SNS topic on both ALARM and OK.
-  # -------------------------------------------------------------------------
   rds_identifier = "${local.name_prefix}-${var.rds_engine}"
 
   rds_alarms = {
@@ -115,8 +60,6 @@ locals {
       severity            = "warning"
     }
 
-    # 10 GiB in bytes. Storage autoscaling should act first; this fires when it
-    # has not, which is the point at which the database is minutes from read-only.
     rds-free-storage = {
       alarm_description   = "RDS free storage below 10 GiB on ${local.name_prefix}"
       namespace           = "AWS/RDS"
@@ -141,9 +84,6 @@ locals {
   }
 
   alb_alarms = {
-    # ELB_5XX, not TARGET_5XX: this counts errors the load balancer generated
-    # itself — no healthy target, or a target that never answered — rather than
-    # errors the application returned deliberately.
     alb-5xx = {
       alarm_description   = "ALB returning 5xx from its own layer on ${local.name_prefix}"
       namespace           = "AWS/ApplicationELB"
@@ -211,14 +151,6 @@ locals {
   }
 }
 
-# ===========================================================================
-# FOUNDATION
-# ===========================================================================
-
-# ---- KMS ------------------------------------------------------------------
-# One key per purpose. Created before anything that references it, which is
-# every encrypted resource in the environment.
-
 module "kms" {
   source = "../../modules/kms"
 
@@ -253,10 +185,6 @@ module "kms" {
   }
 }
 
-# ---- VPC ------------------------------------------------------------------
-# The single network boundary. Everything below consumes its outputs; nothing
-# below creates a VPC, a subnet, a NAT gateway or a route table.
-
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -278,19 +206,12 @@ module "vpc" {
 
   enable_s3_gateway_endpoint = true
 
-  # No security group is passed: the vpc module creates its own for the
-  # endpoints. Taking one from the security-groups module would be a cycle,
-  # since that module needs vpc_id from here.
   interface_endpoints = var.interface_endpoints
 
   eks_cluster_names = local.eks_cluster_names
 
   tags = local.common_tags
 }
-
-# ---- Security groups ------------------------------------------------------
-# Consumes vpc_id. Every workload below takes its security group from here
-# rather than creating one, so the tier-to-tier rules live in a single place.
 
 module "security_groups" {
   source = "../../modules/security-groups"
@@ -318,8 +239,6 @@ module "security_groups" {
   tags = local.common_tags
 }
 
-# ---- IAM baseline ---------------------------------------------------------
-
 module "iam" {
   source = "../../modules/iam"
 
@@ -329,19 +248,11 @@ module "iam" {
   create_ec2_instance_role   = var.enable_ec2
   create_rds_monitoring_role = var.enable_rds
 
-  # Iterating the module rather than indexing it: module.ecr[0] is an error when
-  # enable_ecr is false, and a conditional does not reliably guard against it.
   ec2_ecr_pull_repository_arns = flatten([for m in module.ecr : values(m.repository_arns)])
   ec2_kms_key_arns             = [module.kms.key_arns["ebs"]]
 
   tags = local.common_tags
 }
-
-# ===========================================================================
-# SHARED SERVICES
-# ===========================================================================
-
-# ---- CloudWatch: log groups, alarms, and the topic they publish to --------
 
 module "cloudwatch" {
   source = "../../modules/cloudwatch"
@@ -361,9 +272,6 @@ module "cloudwatch" {
     }
   }
 
-  # Filtered with a for-expression, not a conditional. Terraform requires both
-  # branches of a ternary to have the same object type, and "the RDS alarms" and
-  # "{}" never will — a for-expression with an `if` sidesteps that entirely.
   metric_alarms = merge(
     { for k, v in local.rds_alarms : k => v if var.enable_rds },
     { for k, v in local.alb_alarms : k => v if var.enable_alb },
@@ -374,8 +282,6 @@ module "cloudwatch" {
 
   tags = local.common_tags
 }
-
-# ---- ECR ------------------------------------------------------------------
 
 module "ecr" {
   source = "../../modules/ecr"
@@ -389,10 +295,6 @@ module "ecr" {
   tags = local.common_tags
 }
 
-# ---- Route53 --------------------------------------------------------------
-# Composed before ACM: the certificate's DNS validation records are written
-# into this zone, so the zone ID has to exist first.
-
 module "route53" {
   source = "../../modules/route53"
   count  = var.enable_route53 ? 1 : 0
@@ -400,17 +302,10 @@ module "route53" {
   zone_name   = var.domain_name
   create_zone = var.create_dns_zone
 
-  # Records are written below, not here — see the note in the header about the
-  # alb/acm/route53 cycle.
   records = {}
 
   tags = local.common_tags
 }
-
-# ---- The ALB alias record -------------------------------------------------
-# An alias rather than a CNAME: it resolves at no charge, follows the load
-# balancer's addresses automatically, and is the only record type that can sit
-# on a zone apex.
 
 resource "aws_route53_record" "app" {
   count = var.enable_route53 && var.enable_alb ? 1 : 0
@@ -426,8 +321,6 @@ resource "aws_route53_record" "app" {
   }
 }
 
-# ---- ACM ------------------------------------------------------------------
-
 module "acm" {
   source = "../../modules/acm"
   count  = var.enable_acm && var.enable_route53 ? 1 : 0
@@ -438,10 +331,6 @@ module "acm" {
 
   tags = local.common_tags
 }
-
-# ---- ALB ------------------------------------------------------------------
-# Consumes the foundation's PUBLIC subnets (or private ones when internal),
-# the ALB security group, and the ACM certificate.
 
 module "alb" {
   source = "../../modules/alb"
@@ -454,7 +343,7 @@ module "alb" {
   security_group_ids = [module.security_groups.alb_sg_id]
   internal           = var.alb_internal
 
-  # enable_https mirrors the acm count: the ARN itself is unknown until apply.
+  # Mirrors the acm count: the certificate ARN is unknown until apply.
   enable_https    = var.enable_acm && var.enable_route53
   certificate_arn = one(module.acm[*].certificate_arn)
 
@@ -479,15 +368,6 @@ module "alb" {
   tags = local.common_tags
 }
 
-# ===========================================================================
-# WORKLOADS
-#
-# Every one of these takes vpc_id / subnet IDs / security group IDs as inputs.
-# None of them creates network infrastructure.
-# ===========================================================================
-
-# ---- EKS ------------------------------------------------------------------
-
 module "eks" {
   source = "../../modules/eks"
   count  = var.enable_eks ? 1 : 0
@@ -507,6 +387,7 @@ module "eks" {
 
   node_groups = var.eks_node_groups
 
+  # The eks key always exists here; its ARN is unknown until apply.
   create_kms_key             = false
   kms_key_arn                = module.kms.key_arns["eks"]
   cluster_log_kms_key_arn    = module.kms.key_arns["logs"]
@@ -518,8 +399,6 @@ module "eks" {
   tags = local.common_tags
 }
 
-# ---- EC2 ------------------------------------------------------------------
-
 module "ec2" {
   source = "../../modules/ec2"
   count  = var.enable_ec2 ? 1 : 0
@@ -528,8 +407,6 @@ module "ec2" {
 
   instances = {
     for k, i in var.ec2_instances : k => {
-      # Resolved from the foundation. An environment names an index, not a
-      # subnet ID that does not exist until the VPC is applied.
       subnet_id = module.vpc.private_subnet_ids[
         i.subnet_index % length(module.vpc.private_subnet_ids)
       ]
@@ -550,9 +427,6 @@ module "ec2" {
   tags = local.common_tags
 }
 
-# ---- RDS ------------------------------------------------------------------
-# Database subnet group and RDS security group both come from the foundation.
-
 module "rds" {
   source = "../../modules/rds"
   count  = var.enable_rds ? 1 : 0
@@ -572,9 +446,8 @@ module "rds" {
   max_allocated_storage = var.rds_max_allocated_storage
   kms_key_arn           = module.kms.key_arns["rds"]
 
-  db_name  = var.rds_database_name
-  username = var.rds_username
-  # No password argument exists. AWS generates it into Secrets Manager.
+  db_name                        = var.rds_database_name
+  username                       = var.rds_username
   master_user_secret_kms_key_arn = module.kms.key_arns["secrets"]
 
   multi_az                = local.hardened.rds_multi_az
@@ -590,8 +463,6 @@ module "rds" {
 
   tags = local.common_tags
 }
-
-# ---- ElastiCache ----------------------------------------------------------
 
 module "elasticache" {
   source = "../../modules/elasticache"
@@ -620,8 +491,6 @@ module "elasticache" {
 
   tags = local.common_tags
 }
-
-# ---- Lambda ---------------------------------------------------------------
 
 module "lambda" {
   source = "../../modules/lambda"

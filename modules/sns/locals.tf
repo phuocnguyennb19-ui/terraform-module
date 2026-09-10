@@ -1,11 +1,9 @@
 locals {
-  # 1. Local Module Config (Support dynamic config file name)
   config_local = merge(
     try(yamldecode(file("${path.cwd}/${var.config_file}")), {}),
     var.manual_config
   )
 
-  # 2. Context & Naming (Strict mapping from config.yml)
   env          = lookup(var.global_config, "environment", "dev")
   region       = lookup(var.global_config, "region", "ap-southeast-1")
   project      = lookup(var.global_config, "project", "core")
@@ -13,10 +11,8 @@ locals {
   service_type = lookup(local.config_local, "service_type", "infra")
   name_prefix  = join("-", compact([local.env, local.app_name == "base" ? null : local.app_name, local.service_type]))
 
-  # 3. SNS Config Mapping (Key:Value Sync)
   sns_raw = try(local.config_local.sns, {})
 
-  # Factory mapping for topics
   topics = try(local.sns_raw.topics, {})
 
   tags = merge(

@@ -1,7 +1,3 @@
-# ---------------------------------------------------------------------------
-# Identity and networking — all consumed from the foundation
-# ---------------------------------------------------------------------------
-
 variable "cluster_name" {
   description = "EKS cluster name."
   type        = string
@@ -43,10 +39,6 @@ variable "control_plane_subnet_ids" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# API endpoint exposure
-# ---------------------------------------------------------------------------
-
 variable "cluster_endpoint_private_access" {
   description = "Reach the API server from inside the VPC."
   type        = bool
@@ -69,10 +61,6 @@ variable "cluster_endpoint_public_access_cidrs" {
     error_message = "cluster_endpoint_public_access_cidrs must not contain 0.0.0.0/0. A Kubernetes API server open to the whole internet is one credential leak away from cluster-admin."
   }
 }
-
-# ---------------------------------------------------------------------------
-# Node groups
-# ---------------------------------------------------------------------------
 
 variable "node_groups" {
   description = <<-EOT
@@ -136,10 +124,6 @@ variable "cluster_security_group_ids" {
   type        = list(string)
   default     = []
 }
-
-# ---------------------------------------------------------------------------
-# Encryption, logging, addons
-# ---------------------------------------------------------------------------
 
 variable "kms_key_arn" {
   description = "Customer-managed KMS key encrypting Kubernetes secrets in etcd. Null makes the EKS module create its own key. Secrets are stored base64-encoded, not encrypted, without this."
@@ -229,10 +213,6 @@ variable "irsa_roles" {
   }))
   default = {}
 }
-
-# ---------------------------------------------------------------------------
-# Access
-# ---------------------------------------------------------------------------
 
 variable "authentication_mode" {
   description = "API, API_AND_CONFIG_MAP or CONFIG_MAP. API is the current mechanism — access entries are managed as AWS resources rather than by editing a ConfigMap, so a bad edit cannot lock everyone out."

@@ -1,13 +1,3 @@
-# ACM CERTIFICATE — DNS validated
-#
-# DNS validation rather than email: it renews without a human, which is the only
-# property that matters for a certificate an ALB depends on. Email validation
-# silently stops renewing the moment the listed contact changes.
-#
-# Regional scope. An ACM certificate is usable only by load balancers in the
-# same region; a CloudFront distribution needs one in us-east-1, which means a
-# second provider alias in the caller, not a change here.
-
 module "acm" {
   source  = "terraform-aws-modules/acm/aws"
   version = "5.2.0"

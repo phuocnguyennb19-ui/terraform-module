@@ -1,19 +1,3 @@
-# ===========================================================================
-# ENVIRONMENT ROOT INPUTS
-#
-# This file is identical in dev, staging and prod. Environments differ only in
-# terraform.tfvars and backend.hcl — `make env-drift` proves it, and fails the
-# build if the three roots have diverged.
-#
-# Defaults here are the safe ones. Where production must not be allowed to opt
-# out of a control at all, main.tf applies a floor on top of the value supplied
-# here rather than trusting the tfvars file; see local.hardened in main.tf.
-# ===========================================================================
-
-# ---------------------------------------------------------------------------
-# Identity
-# ---------------------------------------------------------------------------
-
 variable "environment" {
   description = "Environment name. Drives naming, tagging and the production hardening floor in main.tf."
   type        = string
@@ -68,10 +52,6 @@ variable "assume_role_arn" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# Foundation — VPC
-# ---------------------------------------------------------------------------
-
 variable "vpc_cidr" {
   description = "VPC CIDR. Keep environment ranges non-overlapping: overlapping CIDRs make VPC peering and Transit Gateway attachment impossible later, and the cost of fixing it is a re-address."
   type        = string
@@ -118,14 +98,6 @@ variable "interface_endpoints" {
   type        = list(string)
   default     = []
 }
-
-# ---------------------------------------------------------------------------
-# Workload toggles
-#
-# The platform deploys only what an environment switches on. Scenario A (base
-# infrastructure) is every toggle false; Scenario E (full application platform)
-# is all of them true.
-# ---------------------------------------------------------------------------
 
 variable "enable_alb" {
   description = "Deploy the Application Load Balancer."
@@ -187,10 +159,6 @@ variable "enable_bastion_sg" {
   default     = false
 }
 
-# ---------------------------------------------------------------------------
-# DNS and certificates
-# ---------------------------------------------------------------------------
-
 variable "domain_name" {
   description = "Hosted zone name, e.g. \"example.com\". Required when enable_route53 is true."
   type        = string
@@ -214,10 +182,6 @@ variable "certificate_sans" {
   type        = list(string)
   default     = []
 }
-
-# ---------------------------------------------------------------------------
-# ALB
-# ---------------------------------------------------------------------------
 
 variable "alb_internal" {
   description = "Make the ALB internal (VPC-only)."
@@ -248,10 +212,6 @@ variable "alb_access_logs_retention_days" {
   type        = number
   default     = 90
 }
-
-# ---------------------------------------------------------------------------
-# EKS
-# ---------------------------------------------------------------------------
 
 variable "kubernetes_version" {
   description = "EKS Kubernetes minor version, e.g. \"1.31\"."
@@ -289,10 +249,6 @@ variable "eks_access_entries" {
   default     = {}
 }
 
-# ---------------------------------------------------------------------------
-# EC2
-# ---------------------------------------------------------------------------
-
 variable "ec2_instances" {
   description = <<-EOT
     EC2 instances, keyed by short name. subnet_id is resolved by main.tf from
@@ -309,10 +265,6 @@ variable "ec2_instances" {
   }))
   default = {}
 }
-
-# ---------------------------------------------------------------------------
-# RDS
-# ---------------------------------------------------------------------------
 
 variable "rds_engine" {
   description = "postgres or mysql."
@@ -380,10 +332,6 @@ variable "rds_username" {
   default     = "dbadmin"
 }
 
-# ---------------------------------------------------------------------------
-# ElastiCache
-# ---------------------------------------------------------------------------
-
 variable "elasticache_node_type" {
   description = "Cache node type."
   type        = string
@@ -414,10 +362,6 @@ variable "elasticache_auth_token_secret_arn" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# ECR and Lambda
-# ---------------------------------------------------------------------------
-
 variable "ecr_repositories" {
   description = "ECR repositories to create. See modules/ecr/variables.tf."
   type        = any
@@ -435,10 +379,6 @@ variable "lambda_functions" {
   type        = any
   default     = {}
 }
-
-# ---------------------------------------------------------------------------
-# Security and observability
-# ---------------------------------------------------------------------------
 
 variable "bastion_allowed_cidrs" {
   description = "Administrative source ranges allowed to SSH to the bastion. Rejected if it contains 0.0.0.0/0."

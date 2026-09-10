@@ -1,32 +1,3 @@
-# SECURITY GROUP ARCHITECTURE
-#
-#   Internet ──▶ alb :80/:443
-#                  │
-#                  ├──▶ ec2 :application_port
-#                  ├──▶ ecs :application_port
-#                  └──▶ eks_node :application_port, :30000-32767
-#                              │
-#                              ├──▶ rds :database_port
-#                              └──▶ elasticache :cache_port
-#
-# Every rule between tiers references the *source security group*, not a CIDR.
-# A CIDR rule keeps allowing traffic after the instance behind the address is
-# replaced by something else; a group reference follows membership, so scaling a
-# node group or replacing an instance never widens the boundary.
-#
-# Raw CIDRs are accepted in exactly three places, all of them at the perimeter
-# where there is no group to reference: ALB ingress, bastion SSH ingress, and
-# the EKS public API endpoint. The last two are validated against 0.0.0.0/0.
-#
-# Rules are separate aws_vpc_security_group_*_rule resources rather than inline
-# blocks. Inline blocks are authoritative over the whole group, so two modules
-# touching one group silently delete each other's rules; discrete rules also give
-# each rule its own description, which is what makes an audit readable.
-
-# ---------------------------------------------------------------------------
-# The groups
-# ---------------------------------------------------------------------------
-
 resource "aws_security_group" "alb" {
   count = var.create_alb_sg ? 1 : 0
 

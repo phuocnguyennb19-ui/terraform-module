@@ -1,7 +1,3 @@
-# ---------------------------------------------------------------------------
-# Identity
-# ---------------------------------------------------------------------------
-
 variable "name" {
   description = "Name prefix for the VPC and every subnet, route table and gateway inside it. Conventionally \"<project>-<environment>\"."
   type        = string
@@ -17,10 +13,6 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
-# ---------------------------------------------------------------------------
-# Addressing
-# ---------------------------------------------------------------------------
 
 variable "cidr_block" {
   description = "IPv4 CIDR for the VPC. A /16 gives the default subnet layout room to grow; anything smaller than /20 will not fit three tiers across three AZs."
@@ -72,10 +64,6 @@ variable "database_subnet_cidrs" {
   default     = null
 }
 
-# ---------------------------------------------------------------------------
-# Egress
-# ---------------------------------------------------------------------------
-
 variable "enable_nat_gateway" {
   description = "Create NAT gateways so private subnets can reach the internet outbound. Turning this off leaves private workloads with no egress — they will need VPC endpoints for every AWS API they call."
   type        = bool
@@ -93,10 +81,6 @@ variable "one_nat_gateway_per_az" {
   type        = bool
   default     = true
 }
-
-# ---------------------------------------------------------------------------
-# Observability
-# ---------------------------------------------------------------------------
 
 variable "enable_flow_logs" {
   description = "Capture VPC flow logs to CloudWatch Logs. This is the only record of who talked to what inside the VPC; without it a security investigation has nothing to read."
@@ -126,10 +110,6 @@ variable "flow_log_kms_key_arn" {
   type        = string
   default     = null
 }
-
-# ---------------------------------------------------------------------------
-# Shared services attached to the foundation
-# ---------------------------------------------------------------------------
 
 variable "create_database_subnet_group" {
   description = "Create an RDS DB subnet group over the database subnets. The RDS module consumes its name, which is how RDS is prevented from ever landing in a public subnet."
@@ -174,10 +154,6 @@ variable "interface_endpoint_security_group_ids" {
   type        = list(string)
   default     = []
 }
-
-# ---------------------------------------------------------------------------
-# Consumer-driven tagging
-# ---------------------------------------------------------------------------
 
 variable "eks_cluster_names" {
   description = "EKS cluster names that will run in this VPC. Adds the kubernetes.io/cluster/<name> discovery tags to the subnets so the AWS Load Balancer Controller and Cluster Autoscaler can find them. Purely tags — this creates no EKS resource and no dependency on the EKS module."

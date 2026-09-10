@@ -1,22 +1,10 @@
-# CLOUDWATCH — log groups, alarms, and somewhere for the alarms to go
-#
-# The three pieces are in one module on purpose. An alarm needs a destination to
-# be worth creating, and splitting the topic into its own module means every
-# environment has to remember to wire alarm_actions by hand — which is exactly
-# how alarm lists end up with `alarm_actions = []` and nobody notices for a year.
-
 data "aws_region" "current" {}
 
 locals {
-  # Prefer an explicitly supplied topic, fall back to the one created here.
   topic_arn = var.sns_topic_arn != null ? var.sns_topic_arn : one(aws_sns_topic.alarms[*].arn)
 
   alarm_actions = local.topic_arn != null ? [local.topic_arn] : []
 }
-
-# ---------------------------------------------------------------------------
-# Alarm destination
-# ---------------------------------------------------------------------------
 
 resource "aws_sns_topic" "alarms" {
   count = var.create_sns_topic && var.sns_topic_arn == null ? 1 : 0
@@ -49,7 +37,6 @@ data "aws_iam_policy_document" "topic" {
     }
   }
 
-  # Without a TLS condition the topic accepts publishes over plain HTTP.
   statement {
     sid       = "DenyInsecureTransport"
     effect    = "Deny"
@@ -84,26 +71,17 @@ resource "aws_sns_topic_subscription" "this" {
   endpoint  = each.value.endpoint
 }
 
-# ---------------------------------------------------------------------------
-# Log groups
-# ---------------------------------------------------------------------------
-
 resource "aws_cloudwatch_log_group" "this" {
   for_each = var.log_groups
 
   name              = each.value.name
   retention_in_days = each.value.retention_in_days
-  # try() rather than coalesce(): coalesce errors when every argument is null,
-  # and "no KMS key anywhere" is a legitimate configuration.
+  # try(): coalesce() errors when every argument is null.
   kms_key_id   = try(coalesce(each.value.kms_key_arn, var.default_log_kms_key_arn), null)
   skip_destroy = each.value.skip_destroy
 
   tags = merge(var.tags, each.value.tags, { Name = each.value.name })
 }
-
-# ---------------------------------------------------------------------------
-# Alarms
-# ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "this" {
   for_each = var.metric_alarms
@@ -115,8 +93,6 @@ resource "aws_cloudwatch_metric_alarm" "this" {
   metric_name = each.value.metric_name
   dimensions  = each.value.dimensions
 
-  # statistic and extended_statistic are mutually exclusive; extended_statistic
-  # is what you need for percentiles such as p99.
   statistic          = each.value.extended_statistic == null ? each.value.statistic : null
   extended_statistic = each.value.extended_statistic
 
@@ -137,10 +113,6 @@ resource "aws_cloudwatch_metric_alarm" "this" {
     Severity = each.value.severity
   })
 }
-
-# ---------------------------------------------------------------------------
-# Dashboard
-# ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_dashboard" "this" {
   count = var.create_dashboard && length(var.metric_alarms) > 0 ? 1 : 0

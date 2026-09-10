@@ -1,17 +1,3 @@
-# RDS INSTANCE
-#
-# Lands in the foundation's database subnet group and the platform's RDS
-# security group. Both are inputs. This module creates no VPC, no subnet and no
-# subnet group, which is what structurally prevents a database from ending up
-# somewhere reachable: the database subnets have no internet gateway route and
-# no NAT route at all, so "expose RDS to 0.0.0.0/0" is not a configuration this
-# platform can express by accident.
-#
-# Credentials: no password variable exists. manage_master_user_password lets
-# AWS generate and rotate the password into Secrets Manager, so the value never
-# passes through Terraform and never lands in state. Applications read it from
-# the secret ARN this module outputs.
-
 locals {
   default_port = var.engine == "postgres" ? 5432 : 3306
   port         = coalesce(var.port, local.default_port)
@@ -19,12 +5,7 @@ locals {
   default_log_exports = var.engine == "postgres" ? ["postgresql", "upgrade"] : ["error", "general", "slowquery"]
   log_exports         = coalesce(var.enabled_cloudwatch_logs_exports, local.default_log_exports)
 
-  # Force TLS on the wire. Both engines default to permitting an unencrypted
-  # connection, so this has to be set explicitly — a client that never opts into
-  # TLS otherwise gets plaintext and no warning.
-  #
-  # Both parameters are static: they require a reboot, which is why apply_method
-  # is pending-reboot rather than immediate.
+  # Force TLS: both engines accept plaintext by default. Static parameters, hence pending-reboot.
   default_parameters = var.engine == "postgres" ? [
     {
       name         = "rds.force_ssl"
@@ -69,7 +50,6 @@ module "db" {
   major_engine_version = var.major_engine_version
   instance_class       = var.instance_class
 
-  # ---- Placement, from the foundation -------------------------------------
   create_db_subnet_group = false
   db_subnet_group_name   = var.db_subnet_group_name
   vpc_security_group_ids = var.security_group_ids
@@ -78,20 +58,17 @@ module "db" {
   port                = local.port
   publicly_accessible = false
 
-  # ---- Storage ------------------------------------------------------------
   allocated_storage     = var.allocated_storage
   max_allocated_storage = var.max_allocated_storage
   storage_type          = var.storage_type
   storage_encrypted     = true
   kms_key_id            = var.kms_key_arn
 
-  # ---- Credentials --------------------------------------------------------
   db_name                       = var.db_name
   username                      = var.username
   manage_master_user_password   = true
   master_user_secret_kms_key_id = var.master_user_secret_kms_key_arn
 
-  # ---- Backup and deletion ------------------------------------------------
   backup_retention_period          = var.backup_retention_period
   backup_window                    = var.backup_window
   maintenance_window               = var.maintenance_window
@@ -101,7 +78,6 @@ module "db" {
   skip_final_snapshot              = var.skip_final_snapshot
   final_snapshot_identifier_prefix = "${var.identifier}-final"
 
-  # ---- Monitoring ---------------------------------------------------------
   monitoring_interval    = var.monitoring_interval
   monitoring_role_arn    = var.monitoring_interval > 0 ? var.monitoring_role_arn : null
   create_monitoring_role = false
@@ -114,7 +90,6 @@ module "db" {
   create_cloudwatch_log_group            = true
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
-  # ---- Parameters and upgrades -------------------------------------------
   create_db_parameter_group = true
   parameter_group_name      = "${var.identifier}-${replace(var.family, ".", "")}"
   parameters                = local.parameters

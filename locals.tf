@@ -1,21 +1,7 @@
-# ===========================================================================
-# CONFIG DECODE — the one place YAML becomes Terraform
-#
-# Decoded ONCE here. No module below reads the file itself: a module that reads
-# its own config resolves path.cwd independently, and the first time someone
-# runs Terraform from a different directory the root and the modules disagree
-# about which environment they are building.
-#
-# Every lookup is try(<path>, <default>) and every default matches the one the
-# module itself declares. A key absent from the config means "the module's
-# default", never "null" — see the note on nulls in modules/ecs-service/main.tf
-# for what a stray null does to a downstream try().
-# ===========================================================================
-
 locals {
+  # Resolved against the directory Terraform runs from: run it from this root.
   config = yamldecode(file("${path.cwd}/${var.config_file}"))
 
-  # ---- Global -------------------------------------------------------------
   project     = local.config.global.project
   environment = local.config.global.environment
   region      = local.config.global.region
@@ -38,11 +24,6 @@ locals {
     var.tags,
   )
 
-  # ---- Feature gates ------------------------------------------------------
-  #
-  # Default false throughout: a module is built only when its block explicitly
-  # asks for it. A config that omits `rds:` gets no database, rather than a
-  # database built entirely out of defaults.
   enabled = {
     kms             = try(local.config.kms.enabled, false)
     vpc             = try(local.config.vpc.enabled, false)
@@ -61,18 +42,8 @@ locals {
     lambda          = try(local.config.lambda.enabled, false)
   }
 
-  # ECS services are a map, not a toggle: one config can carry several services
-  # against the same cluster, and an empty map builds none.
   ecs_services = try(local.config.ecs_services, {})
 
-  # ---- Pre-existing infrastructure ---------------------------------------
-  #
-  # `existing:` names what this stack must USE but does not OWN. An application
-  # stack disables vpc/alb/ecs_cluster and points here instead.
-  #
-  # Located by name and tag, never by raw ID. An ID is opaque, environment
-  # specific and silently wrong when copied between configs; a tag lookup fails
-  # loudly when the thing it names is not there.
   existing = try(local.config.existing, {})
 
   lookup_vpc     = !local.enabled.vpc && try(local.existing.vpc.name_tag, null) != null
@@ -80,15 +51,7 @@ locals {
   lookup_alb     = !local.enabled.alb && try(local.existing.alb.name, null) != null
   lookup_cluster = !local.enabled.ecs_cluster && try(local.existing.ecs_cluster.name, null) != null
 
-  # ===========================================================================
-  # PRODUCTION HARDENING FLOOR
-  #
-  # Production does not get to opt out of these from a config file. A control
-  # that can be switched off by editing a values file is a control that will
-  # eventually be switched off by accident, in a hurry, by someone chasing an
-  # unrelated failure. Raising a value above the floor is still allowed; going
-  # below it is not expressible.
-  # ===========================================================================
+  # Production floor: in prod these cannot be weakened from the config.
   hardened = {
     single_nat_gateway      = local.is_prod ? false : try(local.config.vpc.single_nat_gateway, false)
     enable_flow_logs        = local.is_prod ? true : try(local.config.vpc.enable_flow_logs, true)
@@ -110,12 +73,9 @@ locals {
 
     ec2_termination_protection = local.is_prod
 
-    # An ECS service below two tasks has no redundancy: a single task is a
-    # single point of failure and every deployment is an outage.
     ecs_min_tasks = local.is_prod ? 2 : 1
   }
 
-  # ---- Derived --------------------------------------------------------------
   eks_cluster_name  = "${local.name_prefix}-eks"
   eks_cluster_names = local.enabled.eks ? [local.eks_cluster_name] : []
 
@@ -132,7 +92,5 @@ locals {
   cache_port       = 6379
   rds_identifier   = "${local.name_prefix}-${local.rds_engine}"
 
-  # Fargate and the AWS Load Balancer Controller both register by IP; only an
-  # EC2 autoscaling group registers by instance.
   target_group_type = local.enabled.ecs_cluster || length(local.ecs_services) > 0 || local.enabled.eks ? "ip" : "instance"
 }

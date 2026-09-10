@@ -1,16 +1,3 @@
-# FOUNDATION — the VPC every workload in the environment shares.
-#
-# This module is the only place in the platform that creates a VPC, subnets, an
-# internet gateway, NAT gateways or route tables. Workload modules (eks, ec2,
-# rds, elasticache, lambda, alb) take vpc_id and subnet IDs as inputs and never
-# create network infrastructure of their own. That is what makes the same
-# network boundary reusable by every workload instead of each one building a
-# parallel island.
-#
-# Upstream: terraform-aws-modules/vpc/aws — the de facto standard implementation
-# of this pattern. It is wrapped rather than used directly so the platform's own
-# interface (name / cidr_block / az_count) stays stable if upstream changes.
-
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.21.0"
@@ -23,20 +10,13 @@ module "vpc" {
   public_subnets   = local.public_subnet_cidrs
   database_subnets = local.database_subnet_cidrs
 
-  # DNS hostnames are required for RDS endpoints, VPC interface endpoints and
-  # EKS private cluster endpoint resolution.
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  # ---- Egress -------------------------------------------------------------
   enable_nat_gateway     = var.enable_nat_gateway
   single_nat_gateway     = var.single_nat_gateway
   one_nat_gateway_per_az = var.single_nat_gateway ? false : var.one_nat_gateway_per_az
 
-  # ---- Database tier isolation -------------------------------------------
-  # No IGW route and no NAT route: the database subnets can be reached from the
-  # application tier and from nowhere else. This is the structural half of "do
-  # not expose RDS to 0.0.0.0/0"; the security group is the other half.
   create_database_subnet_group           = var.create_database_subnet_group
   create_database_subnet_route_table     = true
   create_database_internet_gateway_route = false
@@ -49,7 +29,6 @@ module "vpc" {
   default_security_group_egress   = []
   default_security_group_name     = "${var.name}-default-DO-NOT-USE"
 
-  # ---- Flow logs ----------------------------------------------------------
   enable_flow_log                                 = var.enable_flow_logs
   create_flow_log_cloudwatch_log_group            = var.enable_flow_logs
   create_flow_log_cloudwatch_iam_role             = var.enable_flow_logs
@@ -59,22 +38,12 @@ module "vpc" {
   flow_log_cloudwatch_log_group_retention_in_days = var.flow_log_retention_days
   flow_log_cloudwatch_log_group_kms_key_id        = var.flow_log_kms_key_arn
 
-  # ---- Tags ---------------------------------------------------------------
   public_subnet_tags   = local.public_tags
   private_subnet_tags  = local.private_tags
   database_subnet_tags = local.database_tags
 
   tags = var.tags
 }
-
-# ---------------------------------------------------------------------------
-# ElastiCache subnet group
-#
-# Built here rather than by the elasticache module, and over the database
-# subnets, so a cache is placed in the same no-internet-route tier as RDS. The
-# upstream module's own elasticache subnet group wants dedicated elasticache_subnets;
-# reusing the database tier keeps the address plan to three tiers.
-# ---------------------------------------------------------------------------
 
 resource "aws_elasticache_subnet_group" "this" {
   count = var.create_elasticache_subnet_group ? 1 : 0
@@ -85,14 +54,6 @@ resource "aws_elasticache_subnet_group" "this" {
 
   tags = merge(var.tags, { Name = "${var.name}-cache" })
 }
-
-# ---------------------------------------------------------------------------
-# Gateway VPC endpoints
-#
-# These are free and they keep S3/DynamoDB traffic off the NAT gateway, which is
-# usually the single largest line item in a VPC bill. Attached to the private
-# and database route tables — the public tier already has a direct path.
-# ---------------------------------------------------------------------------
 
 data "aws_region" "current" {}
 
@@ -125,14 +86,6 @@ resource "aws_vpc_endpoint" "dynamodb" {
 
   tags = merge(var.tags, { Name = "${var.name}-dynamodb-endpoint" })
 }
-
-# ---------------------------------------------------------------------------
-# Interface VPC endpoints
-#
-# Billed per hour per AZ plus data, so this is opt-in and explicit. The common
-# reason to enable them is a private EKS cluster or a NAT-less private subnet
-# that still has to reach ECR, CloudWatch Logs and SSM.
-# ---------------------------------------------------------------------------
 
 locals {
   create_endpoint_sg = length(var.interface_endpoints) > 0 && length(var.interface_endpoint_security_group_ids) == 0

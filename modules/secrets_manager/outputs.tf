@@ -10,12 +10,7 @@ output "secret_ids" {
 
 output "secret_names" {
   description = "Map of secret keys to their names"
-  # Taken from the config, not from the child module: upstream
-  # terraform-aws-secrets-manager v1.1.0 exposes secret_arn, secret_id,
-  # secret_replica and secret_version_id — there is no secret_name. Reading one
-  # made every apply of this module fail, and `validate` never caught it because
-  # it does not evaluate a child module's outputs.
-  value = { for k, v in local.secrets : k => v.name }
+  value       = { for k, v in local.secrets : k => v.name }
 }
 
 output "secret_version_ids" {

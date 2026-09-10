@@ -1,8 +1,3 @@
-# THE CLUSTER CONTRACT
-#
-# arn is what every ecs-service in this environment consumes. Treat these names
-# as a public API: renaming one breaks every stack that reads this state.
-
 output "arn" {
   description = "Cluster ARN. Consumed by the ecs-service module as cluster_arn."
   value       = module.cluster.arn

@@ -1,6 +1,5 @@
 locals {
-  # Whether each group exists. Booleans only — for_each keys must be known at
-  # plan time, and security group IDs are not.
+  # Booleans only: for_each keys must be known at plan; security group IDs are not.
   exists = {
     alb         = var.create_alb_sg
     eks_cluster = var.create_eks_sg
@@ -25,19 +24,12 @@ locals {
     bastion     = one(aws_security_group.bastion[*].id)
   }
 
-  # Every group-to-group ingress rule in the platform, declared once. A rule is
-  # created only when both endpoints exist, so disabling a tier removes the
-  # rules that pointed at it instead of leaving a dangling reference.
   group_ingress = {
-    # --- edge to compute -------------------------------------------------
     "ec2-from-alb" = {
       target = "ec2", source = "alb"
       from   = var.application_port, to = var.application_port
       desc   = "Application traffic from the ALB"
     }
-    # Fargate awsvpc networking gives every task its own ENI in the private
-    # subnets, so the ALB reaches the container port directly. There is no
-    # NodePort equivalent and no host to hop through.
     "ecs-from-alb" = {
       target = "ecs", source = "alb"
       from   = var.application_port, to = var.application_port
@@ -54,10 +46,6 @@ locals {
       desc   = "NodePort range from the ALB (instance target mode)"
     }
 
-    # --- EKS control plane <-> nodes -------------------------------------
-    # These are the minimum set the kubelet and the API server need. The EKS
-    # module adds its own managed rules on top when it creates its own groups;
-    # these exist so the platform's groups work standalone.
     "eks-cluster-from-node" = {
       target = "eks_cluster", source = "eks_node"
       from   = 443, to = 443
@@ -79,7 +67,6 @@ locals {
       desc   = "Node to node — required by the VPC CNI and CoreDNS"
     }
 
-    # --- compute to data --------------------------------------------------
     "rds-from-ec2" = {
       target = "rds", source = "ec2"
       from   = var.database_port, to = var.database_port
@@ -126,7 +113,6 @@ locals {
       desc   = "Cache access from VPC-attached Lambda functions"
     }
 
-    # --- bastion to compute ----------------------------------------------
     "ec2-from-bastion-ssh" = {
       target = "ec2", source = "bastion"
       from   = 22, to = 22
@@ -144,13 +130,11 @@ locals {
     }
   }
 
-  # Filtered to the rules whose two endpoints both exist in this environment.
   active_group_ingress = {
     for k, r in local.group_ingress : k => r
     if local.exists[r.target] && local.exists[r.source]
   }
 
-  # Perimeter ingress: the only rules that name a CIDR instead of a group.
   cidr_ingress = merge(
     var.create_alb_sg ? {
       for c in var.alb_ingress_cidrs : "alb-https-${c}" => {
@@ -178,10 +162,6 @@ locals {
     } : {},
   )
 }
-
-# ---------------------------------------------------------------------------
-# Ingress
-# ---------------------------------------------------------------------------
 
 resource "aws_vpc_security_group_ingress_rule" "group" {
   for_each = local.active_group_ingress
@@ -226,21 +206,6 @@ resource "aws_vpc_security_group_ingress_rule" "additional" {
 
   tags = merge(var.tags, { Name = "${var.name}-${each.key}" })
 }
-
-# ---------------------------------------------------------------------------
-# Egress
-#
-# The compute tiers get unrestricted egress: they pull container images, OS
-# packages and third-party APIs, and pinning that to a CIDR list breaks the
-# first time a registry changes address. Tightening it is a real hardening step,
-# but it needs an egress proxy or VPC endpoints to replace what it removes —
-# not a narrower CIDR list.
-#
-# The ALB gets egress to the VPC only, because it never has a reason to talk to
-# the internet. The data tiers get NO egress rule at all: RDS and ElastiCache
-# are pure destinations, and an AWS security group with zero egress rules
-# denies all outbound traffic.
-# ---------------------------------------------------------------------------
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_vpc" {
   count = var.create_alb_sg ? 1 : 0

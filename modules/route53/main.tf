@@ -1,10 +1,3 @@
-# ROUTE53 — the entry point of the shared-services layer
-#
-# The zone is either created here or looked up, and records point at whatever
-# the environment stands up. The ALB alias record is the usual reason this
-# module exists; ACM also consumes the zone ID to write its validation records,
-# which is why route53 has to be composed before acm in the environment root.
-
 resource "aws_route53_zone" "this" {
   count = var.create_zone ? 1 : 0
 
@@ -41,8 +34,7 @@ resource "aws_route53_record" "this" {
   name    = each.value.name
   type    = each.value.type
 
-  # TTL and records are mutually exclusive with an alias block — an alias has no
-  # TTL of its own, it inherits the target's.
+  # An alias record takes no TTL or records.
   ttl     = each.value.alias == null ? each.value.ttl : null
   records = each.value.records
 

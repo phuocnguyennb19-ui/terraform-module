@@ -1,14 +1,3 @@
-# ===========================================================================
-# STACK OUTPUTS
-#
-# These are the values an application stack needs in order to find a base stack,
-# and the values a deployment log needs in order to say what was released.
-#
-# Named by what they are, not by which module produced them: a consumer should
-# not have to care whether `vpc_id` came from a vpc module in this state or a
-# tag lookup against someone else's.
-# ===========================================================================
-
 output "environment" {
   description = "Environment this stack built, straight from the config. Check this before trusting anything else in the output."
   value       = local.environment
@@ -34,8 +23,6 @@ output "enabled_modules" {
   value       = { for k, v in local.enabled : k => v if v }
 }
 
-# ---- Network --------------------------------------------------------------
-
 output "vpc_id" {
   description = "VPC this stack built or found."
   value       = local.vpc_id
@@ -51,8 +38,6 @@ output "public_subnet_ids" {
   value       = local.public_subnet_ids
 }
 
-# ---- Edge -----------------------------------------------------------------
-
 output "alb_dns_name" {
   description = "Load balancer DNS name, or null when this stack has no ALB."
   value       = one(module.alb[*].dns_name)
@@ -67,8 +52,6 @@ output "app_url" {
   description = "The name the application is published under, or null when no DNS is managed here."
   value       = local.app_fqdn != null ? "https://${local.app_fqdn}" : null
 }
-
-# ---- ECS ------------------------------------------------------------------
 
 output "ecs_cluster_arn" {
   description = "ECS cluster this stack built or found. This is the value an application config puts under existing.ecs_cluster."
@@ -94,8 +77,6 @@ output "ecs_task_exec_role_arns" {
   description = "Map of service key to execution role ARN. A secret's resource policy must name THIS role, not the task role — the execution role is what fetches the secret before the container starts."
   value       = { for k, s in module.ecs_service : k => s.task_exec_iam_role_arn }
 }
-
-# ---- Registry and data ----------------------------------------------------
 
 output "ecr_repository_urls" {
   description = "Map of repository key to registry URL. This is what a CI build tags an image with."
