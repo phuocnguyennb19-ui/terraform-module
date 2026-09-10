@@ -22,8 +22,7 @@ terraform-aws-platform    values (config.yaml) and backends, per environment
 
 Terraform must run from this repository's root: `locals.tf` reads the config as
 `file("${path.cwd}/${var.config_file}")`, relative to the directory Terraform
-runs from. `terraform-aws-platform`'s `make init` / `make plan` do this for you;
-by hand it is:
+runs from. From a checkout of this repository, next to `terraform-aws-platform`:
 
 ```bash
 cp ../terraform-aws-platform/environments/dev/config.yaml config.yaml

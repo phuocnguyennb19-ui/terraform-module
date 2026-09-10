@@ -12,8 +12,9 @@ tag pins the root and its modules together.
 
 No environment lives here — no values, no environment directory, an empty `backend "s3" {}`.
 [`../terraform-aws-platform`](../terraform-aws-platform) holds only `config.yaml` + `backend.hcl`
-per environment; its Makefile clones this repo at a pinned tag, copies both into the clone, and
-runs Terraform from this root. `config.yaml` / `backend.hcl` are gitignored here.
+per environment — no `.tf`, no Makefile, no pipeline. A deploy clones this repo at a pinned tag,
+copies both files into the clone, and runs Terraform from this root (the platform README's
+"Deploying" section). `config.yaml` / `backend.hcl` are gitignored here.
 
 Other callers can still consume a single module by tag —
 `git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=<tag>` — and
