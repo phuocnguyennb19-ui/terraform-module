@@ -4,147 +4,91 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-20 reusable AWS Terraform modules under `modules/`, plus a root composition that wires all 20
-into one stack for one environment. Every module is a thin wrapper over a pinned
-`terraform-aws-modules` release; the module's only job is to map YAML onto upstream arguments.
+A **library** of 22 reusable AWS Terraform modules under `modules/`. Nothing here deploys
+anything: there is no root composition, no environment directory, no state backend and no
+provider block. Each module takes typed Terraform inputs and returns outputs.
 
-Configuration is **YAML, not tfvars** — `.gitignore` excludes `*.tfvars`.
+The consumer is [`../terraform-aws-platform`](../terraform-aws-platform), which holds the
+values, the environments and the state, and pulls modules by tag:
 
-`README.md` is the reference: per-module upstream pins, every root output, every YAML block name,
-the per-environment value table, and the numbered known-defects list. Read it before changing a
-module; this file covers only what is not written down there.
+```hcl
+source = "git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=v1.0.0"
+```
+
+Because the source is a `//modules/<name>` subdirectory, a consumer only ever receives that one
+directory — never the repository root.
+
+`README.md` is the reference: the module table with upstream pins, the version constraints and
+the release rules. Each module has its own `README.md` with full input and output tables,
+generated from `variables.tf` and `outputs.tf`.
+
+## Two interfaces live here — do not mix them
+
+**Typed (16 modules)** — `acm`, `alb`, `cloudwatch`, `ec2`, `ecr`, `ecs-cluster`,
+`ecs-service`, `eks`, `elasticache`, `iam`, `kms`, `lambda`, `rds`, `route53`,
+`security-groups`, `vpc`. Ordinary Terraform variables. This is the contract.
+
+**Legacy YAML (6 modules)** — `s3`, `sqs`, `sns`, `dynamodb`, `secrets_manager`, `waf`. These
+still take a `global_config` object and read a config file through `yamldecode`, a holdover from
+when this repo carried its own root. They cannot be called the way the README snippets show,
+`examples/complete` does not exercise them, and **they are not the pattern to copy**. Porting
+them to typed inputs is outstanding work.
 
 ## Commands
 
-There is no Makefile, no CI, no `terraform test`, and no lint config. Some config comments still
-say `make plan ENV=dev` — that Makefile does not exist. The real loop:
+No Makefile and no CI in this repo. `examples/complete` is what proves a change compiles — it
+sources every typed module by relative path, so it validates against the working tree:
 
 ```bash
-# Always from the repository root — see "path.cwd" below.
-terraform init -reconfigure -backend-config=environments/dev/backend.hcl
-
-terraform fmt -recursive
+cd examples/complete
+terraform init -backend=false      # no AWS credentials, no state bucket needed
 terraform validate
 
-terraform plan  -input=false -var="config_file=environments/dev/config.yml" -out=tfplan-dev
-terraform apply -input=false tfplan-dev
+cd ../..
+terraform fmt -check -recursive
 ```
 
-Per-module config directory instead of one file (`config_dir` wins when both are set):
+`terraform plan` in `examples/complete` needs real credentials and a `terraform.tfvars`; copy
+`terraform.tfvars.example` first. `terraform.tfvars` is gitignored.
+
+## Conventions
+
+- Module directories are **kebab-case** (`ecs-cluster`); module block labels are snake_case
+  (`module "ecs_cluster"`). The six legacy modules keep snake_case directory names.
+- **A module never reads a file from disk** and never calls `yamldecode`. Whoever calls it
+  decides where values come from. (The six legacy modules violate this; that is the bug, not
+  the precedent.)
+- **No provider blocks in modules.** A module that declares one cannot be used twice in the
+  same configuration.
+- **No `depends_on` between modules.** Ordering comes from one module's output feeding
+  another's input, so Terraform derives the graph itself.
+- Optional inputs carry defaults, so a caller writes only what is genuinely a decision.
+- Terraform `>= 1.5.7`, AWS provider `>= 5.80.0, < 6.0.0`, declared per module in
+  `modules/*/versions.tf`.
+
+## Changing a module
+
+1. Read the module's `README.md` and `variables.tf` first — an input may already exist.
+2. Change `variables.tf`, `main.tf`, `outputs.tf`.
+3. Regenerate that module's `README.md` and the snippet in `examples/README.md`; both are
+   derived from `variables.tf` and go stale silently.
+4. `terraform validate` in `examples/complete`, then `terraform fmt -check -recursive`.
+
+## Releasing
+
+Consumers pin a tag, so a change is invisible to them until one is cut:
 
 ```bash
-terraform plan -var="config_dir=examples/module-config"
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
-Closest thing to a single-unit test — plan one module in isolation:
+Minor for a new module or a new optional input. **Major** for a renamed or removed input, a
+renamed module directory, or a changed output — each of those breaks a caller's plan.
 
-```bash
-cd examples/core-service && terraform init && terraform plan   # 5 modules, HTTPS API end to end
-terraform plan -var="config_file=environments/dev/config.yml" -target=module.vpc   # from root
-```
+Never point a consumer's `ref` at a branch.
 
-Against LocalStack rather than AWS:
+## Known gaps
 
-```bash
-terraform plan -var="config_file=environments/dev/config.yml" \
-               -var="localstack_endpoint=http://localhost:4566"
-```
-
-LocalStack Community answers 501 for `ecr`, `ecs`, `elbv2`, `eks` and `rds`; a config enabling
-those cannot be applied against it.
-
-Terraform is pinned to `1.5.7` in `.terraform-version`; `.terraform.lock.hcl` is committed.
-
-## Architecture
-
-### Config is read twice, by two different readers
-
-The root decodes the YAML in `locals.tf`, and **each module decodes the same file again** in its
-own `locals.tf`. The root does not translate config — it passes the same `config_file` string
-down and each module picks its own block out of it. The root only passes:
-
-| Argument | Meaning |
-|---|---|
-| `config_file` | path, resolved by the module as `file("${path.cwd}/${var.config_file}")` |
-| `manual_config` | the merged config for that module, merged over the module's own YAML read |
-| `global_config` | `environment`, `region`, `project`, `managed_by`, `cost_center`, `tags` |
-| `tags` | extra tags |
-
-Plus wiring inputs (`vpc_id`, subnets, `cluster_arn`, `listener_arn`, ARNs) — the only values that
-travel between modules. Everything else travels through the YAML.
-
-**`path.cwd`, not `path.module`.** Run from the repository root or the module's read resolves to
-the wrong path, `try(..., {})` swallows the error, and Terraform silently builds from defaults
-without failing. This is the failure mode to suspect whenever a plan looks empty or generic.
-
-### `enabled` is the caller's flag
-
-No module has an internal `enabled` flag. `local.enabled` in the root reads `<block>.enabled` and
-turns it into `count = ... ? 1 : 0`; default is **false**. Every root output is `try()`-wrapped
-because a disabled module has no instance to index. `terraform output enabled_modules` reports
-what an environment switched on. `dns`, `ecs_cluster` and `ecs_service` accept a legacy block name
-too (`route53`, `ecs_cluster`, `ecs_service`) via `coalesce`.
-
-### Two-level merge in directory mode
-
-`merge()` is shallow and would drop the rest of a block, so `local.cfg` re-merges every map-valued
-block one level down: `module defaults (locals.tf) → common.yml → <module>.yml`. Lists are
-replaced wholesale. `common.yml` is read with a bare `file()` so a missing one is a hard error;
-per-module overlays are read as a **string first, then decoded** — deliberately not
-`try(yamldecode(...), {})`, so malformed YAML errors instead of masquerading as "no overlay".
-
-### `existing:` — adopting infrastructure this stack does not own
-
-`enabled: false` plus an `existing:` block means "look it up" rather than "it does not exist".
-`local.lookup` gates each data source on the owning module being disabled *and* the config naming
-it, so an environment that builds everything makes no extra API call. A `count = 0` data source is
-still schema-checked, hence the `"unused"` placeholders in `local.ex`.
-
-### Module authoring pattern
-
-`locals.tf` builds exactly one `local.<service>_config` object where every key is
-`try(raw_cfg.<key>, <default>)`; `main.tf` reads **only** from that object, never from the raw
-YAML. Environment-conditional defaults live in the local
-(`single_nat_gateway = try(..., local.env != "prod")`). Adding a key with a `try()` default is
-backward compatible; renaming or removing one is not.
-
-Naming: `name_prefix = join("-", compact([env, app_name == "base" ? null : app_name, service_type]))`
-— `app_name` and `service_type` are at the YAML root, and `"base"` is dropped, so dev + infra gives
-`dev-infra`.
-
-## Traps
-
-- **`providers.tf` `endpoints`** — a service missing from that block does not fail under
-  `localstack_endpoint`; it silently goes to **real AWS**. Adding a module means adding its service
-  there in the same change.
-- **`backend.tf` is empty by design**; bucket and key come from `-backend-config` at init. There
-  is deliberately no `backend.hcl` at the repo root — always name one under
-  `environments/<env>/`.
-- **State locking is off** in every environment. Each `backend.hcl` carries two commented lines
-  (`dynamodb_table` for 1.5.7, `use_lockfile` for CLI ≥ 1.10); concurrent applies can corrupt state.
-- **Four module-to-module edges do not exist** (ACM cert → ALB listener, IAM roles → task
-  definition, ALB ARN → WAF, SNS topic → CloudWatch `alarm_actions`), so those values must be
-  literals and a full stack needs a two-pass apply. `alarm_actions` is `[]` in all three
-  environments, meaning those alarms notify nobody.
-- **`required_version = ">= 1.0"` is wrong in 19 of 20 modules** — all 20 use `optional()`, a 1.3
-  feature. Only `eks` and the root declare `>= 1.3`.
-- **`ecs_service` resolves nested blocks inconsistently**: `task_definition` uses
-  `merge(nested, root)` so a root-level `task_definition:` wins, while `container_definitions` and
-  `volumes` prefer the nested copy. Left alone on purpose — changing it would silently relocate
-  config. It also hardcodes its log group as `/ecs/${name_prefix}`.
-- `kms.rotation_period_in_days`, `waf.logging_configuration` and `s3.notification_configurations`
-  survive in `locals.tf` but are no longer passed in `main.tf`; setting them in YAML does nothing.
-- No secret values belong in this tree. RDS uses the AWS-managed master user secret; everything
-  else is referenced by ARN. State stores those values in plaintext.
-
-## Blast radius
-
-Outputs are pass-throughs of pinned upstream modules, so renaming an output or changing a variable
-type breaks `aws-base-infras` and `aws-application-infras`, which read this repo's state and
-`source` paths (10 and 15 references respectively). Grep both before changing either. Restructuring
-`modules/` into domain directories would break all 25 `source` paths.
-
-`~/Dylan/Claude/terraform-module` is the same repo at the same commit and is the checkout the
-consumer repos resolve against; changes here do not reach them until pushed and pulled there.
-
-`staging` and `prod` configs must stay structurally identical — only values differ.
+- The six legacy modules above.
+- `examples/complete` does not cover `ecs-cluster` or `ecs-service`; those are exercised by the
+  platform repository's own root.
