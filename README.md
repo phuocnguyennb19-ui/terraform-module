@@ -15,12 +15,11 @@ terraform-aws-platform    config.yaml → mapping → composition → state + CI
 terraform-module          this repo — modules/, released by tag
 ```
 
-## Legacy root composition
+## No root composition
 
-The `.tf` files at the repository root are the old YAML-driven engine (it read
-`config.yaml` from the directory Terraform ran in). The platform no longer uses
-it; it stays for existing pinned consumers and is removed in `v2.0.0`. Do not
-build on it.
+Since `v2.0.0` the repository root holds no `.tf`: the YAML-driven engine that
+used to live here is gone, and composition belongs to the platform. Callers of
+that engine (`ecs-platform`, `dev-app-no01`) must pin `v1.3.0` or earlier.
 
 ## Usage
 

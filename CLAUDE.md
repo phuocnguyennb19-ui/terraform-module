@@ -14,11 +14,11 @@ owns everything above the modules: `config.yaml`, the mapping to module inputs, 
 composition, state and CI. A capability the platform needs is added here, released by tag,
 and picked up by bumping `?ref=` there.
 
-**Legacy root composition.** The `.tf` files at the repository root (`main.tf`, `locals.tf`,
-`data.tf`, `alarms.tf`, …) are the old YAML-driven engine. The platform no longer runs them;
-they stay only for `ecs-platform` (pinned `eb783ef`) and `dev-app-no01` (pinned to `master`)
-and are slated for removal in `v2.0.0`. Do not extend them — put the change in a module, and
-the mapping in the platform.
+**No root composition.** The YAML-driven engine that lived at the repository root was
+removed in `v2.0.0`; do not bring `.tf` back to the root — a change goes in a module, the
+mapping and composition in the platform. Its old callers must pin `v1.3.0` or earlier:
+`ecs-platform` (pinned `eb783ef`) and `dev-app-no01` (`TERRAFORM_ENGINE_REF`, which defaults
+to `master`).
 
 `README.md` is the reference: the module table with upstream pins, the version constraints and
 the release rules. Each module has its own `README.md` with full input and output tables,
