@@ -1,5 +1,6 @@
 provider "aws" {
-  region = local.region
+  region              = local.region
+  allowed_account_ids = local.account_id != null ? [local.account_id] : null
 
   dynamic "assume_role" {
     for_each = local.assume_role_arn != null ? [1] : []

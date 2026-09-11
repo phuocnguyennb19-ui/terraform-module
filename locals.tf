@@ -10,6 +10,7 @@ locals {
   is_prod     = local.environment == "prod"
 
   assume_role_arn = try(local.config.global.assume_role_arn, null)
+  account_id      = try(tostring(local.config.global.account_id), null)
 
   common_tags = merge(
     {

@@ -260,6 +260,12 @@ variable "target_group_arn" {
   default     = null
 }
 
+variable "enable_load_balancer" {
+  description = "Register tasks in target_group_arn. Set it explicitly — true alongside target_group_arn — whenever that target group is created in the same configuration: its ARN is unknown at plan, and inferring this from it fails the plan. Null infers it from target_group_arn != null."
+  type        = bool
+  default     = null
+}
+
 variable "load_balancer_container_name" {
   description = "Container receiving load balanced traffic. Must be a key in containers. Required when target_group_arn is set."
   type        = string

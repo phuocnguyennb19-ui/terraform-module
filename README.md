@@ -1,37 +1,26 @@
 # terraform-module
 
-Reusable AWS Terraform modules under `modules/`, plus the **root composition** at
-the repository root (`main.tf`, `locals.tf`, …) that wires them together from a
-single YAML config. No environment lives here: there are no values, no
-environment directories and no committed backend settings.
+Reusable AWS Terraform modules under `modules/`. Modules take typed variables and
+know nothing about YAML, environments or state. No environment lives here.
 
-Values and state locations belong to
-[`terraform-aws-platform`](../terraform-aws-platform). It clones this repository
-at a pinned tag, copies one environment's `config.yaml` and `backend.hcl` into
-the clone, and runs Terraform from this root.
+[`terraform-aws-platform`](../terraform-aws-platform) consumes them: it turns a
+developer's `config.yaml` into module inputs and sources each module from this
+repository by tag.
 
 ```
-terraform-module          this repo — modules/ + the root that composes them
-        ▲
-        │  git clone --branch <tag>; config.yaml + backend.hcl copied in
+terraform-aws-platform    config.yaml → mapping → composition → state + CI
         │
-terraform-aws-platform    values (config.yaml) and backends, per environment
+        │  source = "git::…/terraform-module.git//modules/<name>?ref=<tag>"
+        ▼
+terraform-module          this repo — modules/, released by tag
 ```
 
-## Running the root
+## Legacy root composition
 
-Terraform must run from this repository's root: `locals.tf` reads the config as
-`file("${path.cwd}/${var.config_file}")`, relative to the directory Terraform
-runs from. From a checkout of this repository, next to `terraform-aws-platform`:
-
-```bash
-cp ../terraform-aws-platform/environments/dev/config.yaml config.yaml
-cp ../terraform-aws-platform/environments/dev/backend.hcl backend.hcl
-terraform init -reconfigure -backend-config=backend.hcl
-terraform plan -var config_file=config.yaml
-```
-
-`config.yaml` and `backend.hcl` are gitignored here.
+The `.tf` files at the repository root are the old YAML-driven engine (it read
+`config.yaml` from the directory Terraform ran in). The platform no longer uses
+it; it stays for existing pinned consumers and is removed in `v2.0.0`. Do not
+build on it.
 
 ## Usage
 
@@ -105,22 +94,18 @@ major of every one of those modules — a coordinated upgrade, not a version bum
   never calls `yamldecode`. Whoever calls it decides where values come from.
 - **No `depends_on` between modules.** Ordering is expressed by one module's
   output feeding another's input, so Terraform derives the graph itself.
-- **No provider blocks in modules.** The provider is configured once, in the
-  root's `providers.tf` (or by any other caller); a module that declares one
-  cannot be used twice in the same configuration.
+- **No provider blocks in modules.** The provider is configured once, by the
+  caller's root; a module that declares one cannot be used twice in the same
+  configuration.
 - **Optional inputs carry defaults.** If a module can pick a safe value, it does,
   so a caller writes only what is genuinely a decision.
 
 ## Validating a change
 
-The root and `examples/complete` both compile against the working tree — the
-root sources `./modules/<name>`, the example `../../modules/<name>`. Neither
-needs AWS credentials or a state bucket:
+`examples/complete` compiles against the working tree — it sources
+`../../modules/<name>` — and needs no AWS credentials or state bucket:
 
 ```bash
-terraform init -backend=false
-terraform validate
-
 cd examples/complete
 terraform init -backend=false
 terraform validate
@@ -148,5 +133,8 @@ of those breaks a caller's plan.
   config file rather than typed inputs, so they cannot be called the way the
   snippets above show, and `examples/complete` does not exercise them. Porting
   them is outstanding work.
-- `examples/complete` does not cover `ecs-cluster` or `ecs-service`; those are
-  exercised by the root composition.
+- `examples/complete` does not cover `ecs-cluster` or `ecs-service`; the
+  platform's plan exercises them.
+- `ecs-service` has no Service Connect / service discovery, and
+  `security-groups` opens one `application_port` from the ALB — services cannot
+  call each other directly and share one container port.

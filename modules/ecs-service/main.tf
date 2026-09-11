@@ -58,7 +58,10 @@ locals {
 
   autoscaling_policies = merge(local.default_autoscaling_policies, var.autoscaling_policies_extra)
 
-  load_balancer = var.target_group_arn != null ? {
+  # Explicit bool: target_group_arn is unknown at plan when the ALB is built in the same stack.
+  load_balancer_enabled = var.enable_load_balancer != null ? var.enable_load_balancer : var.target_group_arn != null
+
+  load_balancer = local.load_balancer_enabled ? {
     default = {
       target_group_arn = var.target_group_arn
       container_name   = var.load_balancer_container_name
@@ -68,9 +71,14 @@ locals {
 }
 
 resource "terraform_data" "load_balancer_wiring" {
-  count = var.target_group_arn != null ? 1 : 0
+  count = local.load_balancer_enabled ? 1 : 0
 
   lifecycle {
+    precondition {
+      condition     = var.target_group_arn != null
+      error_message = "enable_load_balancer is true, so target_group_arn is required."
+    }
+
     precondition {
       condition     = var.load_balancer_container_name != null && var.load_balancer_container_port != null
       error_message = "target_group_arn is set, so load_balancer_container_name and load_balancer_container_port are both required."
@@ -165,7 +173,7 @@ module "service" {
   propagate_tags          = var.propagate_tags
 
   load_balancer                     = local.load_balancer
-  health_check_grace_period_seconds = var.target_group_arn != null ? var.health_check_grace_period_seconds : null
+  health_check_grace_period_seconds = local.load_balancer_enabled ? var.health_check_grace_period_seconds : null
 
   enable_autoscaling       = var.enable_autoscaling
   autoscaling_min_capacity = var.autoscaling_min_capacity

@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-22 reusable AWS Terraform modules under `modules/`, plus the **root composition** at the
-repository root (`main.tf`, `locals.tf`, `data.tf`, `alarms.tf`, `outputs.tf`, `providers.tf`,
-`backend.tf`, `variables.tf`, `versions.tf`). The root decodes one YAML config and gates every
-module on `<block>.enabled`; it sources modules by relative path (`./modules/<name>`), so a
-tag pins the root and its modules together.
+22 reusable AWS Terraform modules under `modules/` — **the library**. Modules take typed
+variables and never know that anyone uses YAML.
 
-No environment lives here — no values, no environment directory, an empty `backend "s3" {}`.
-[`../terraform-aws-platform`](../terraform-aws-platform) holds only `config.yaml` + `backend.hcl`
-per environment — no `.tf`, no Makefile, no pipeline. A deploy clones this repo at a pinned tag,
-copies both files into the clone, and runs Terraform from this root (the platform README's
-"Deploying" section). `config.yaml` / `backend.hcl` are gitignored here.
-
-Other callers can still consume a single module by tag —
+[`../terraform-aws-platform`](../terraform-aws-platform) is the only intended consumer. It
+sources each module by tag —
 `git::https://github.com/phuocnguyennb19-ui/terraform-module.git//modules/vpc?ref=<tag>` — and
-receive only that directory.
+owns everything above the modules: `config.yaml`, the mapping to module inputs, the
+composition, state and CI. A capability the platform needs is added here, released by tag,
+and picked up by bumping `?ref=` there.
+
+**Legacy root composition.** The `.tf` files at the repository root (`main.tf`, `locals.tf`,
+`data.tf`, `alarms.tf`, …) are the old YAML-driven engine. The platform no longer runs them;
+they stay only for `ecs-platform` (pinned `eb783ef`) and `dev-app-no01` (pinned to `master`)
+and are slated for removal in `v2.0.0`. Do not extend them — put the change in a module, and
+the mapping in the platform.
 
 `README.md` is the reference: the module table with upstream pins, the version constraints and
 the release rules. Each module has its own `README.md` with full input and output tables,
@@ -38,12 +38,10 @@ them to typed inputs is outstanding work.
 
 ## Commands
 
-No Makefile and no CI in this repo. The root and `examples/complete` are what prove a change
-compiles — both source modules by relative path, so they validate against the working tree:
+No Makefile and no CI in this repo. `examples/complete` is what proves a module change
+compiles — it sources modules by relative path, so it validates against the working tree:
 
 ```bash
-terraform init -backend=false && terraform validate   # the root
-
 cd examples/complete
 terraform init -backend=false      # no AWS credentials, no state bucket needed
 terraform validate
@@ -55,6 +53,11 @@ terraform fmt -check -recursive
 `terraform plan` in `examples/complete` needs real credentials and a `terraform.tfvars`; copy
 `terraform.tfvars.example` first. `terraform.tfvars` is gitignored.
 
+To try an unreleased module in the platform, point that one `source` in
+`../terraform-aws-platform/terraform/main.tf` at the local path
+(`../../terraform-root-module/modules/<name>`) for the run, then restore the `?ref=` before
+committing.
+
 ## Conventions
 
 - Module directories are **kebab-case** (`ecs-cluster`); module block labels are snake_case
@@ -63,7 +66,11 @@ terraform fmt -check -recursive
   decides where values come from. (The six legacy modules violate this; that is the bug, not
   the precedent.)
 - **No provider blocks in modules.** A module that declares one cannot be used twice in the
-  same configuration. The root's `providers.tf` is the only provider block.
+  same configuration. The caller's root — the platform — owns the provider block.
+- **Decide `count` / `for_each` from known values.** When an input may be an ARN created in the
+  same apply (a certificate, a target group), add an explicit bool beside it (`alb.enable_https`,
+  `ecs-service.enable_load_balancer`) instead of testing the ARN for null — an unknown ARN fails
+  the plan.
 - **No `depends_on` between modules.** Ordering comes from one module's output feeding
   another's input, so Terraform derives the graph itself.
 - Optional inputs carry defaults, so a caller writes only what is genuinely a decision.
@@ -94,5 +101,8 @@ Never point a consumer's `ref` at a branch.
 ## Known gaps
 
 - The six legacy modules above.
-- `examples/complete` does not cover `ecs-cluster` or `ecs-service`; those are exercised by the
-  root composition.
+- `examples/complete` does not cover `ecs-cluster` or `ecs-service`; the platform's plan
+  exercises them.
+- `ecs-service` has no Service Connect / service discovery, and `security-groups` opens a single
+  `application_port` from the ALB — so services cannot call each other directly and all listen
+  on one port.
